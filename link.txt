@@ -1,0 +1,6 @@
+https://github.com/qiuzi/dns2socks => dns2socks
+https://github.com/shadowsocks/go-shadowsocks2 => ss
+https://github.com/shadowsocks/v2ray-plugin	=> v2ray
+https://github.com/eycorsican/go-tun2socks	=>tun2socks
+https://github.com/jech/polipo => polipo
+https://github.com/Noisyfox/sysproxy	=> sysproxy
