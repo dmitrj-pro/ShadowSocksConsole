@@ -1,0 +1,9 @@
+<form method="POST" action="/settings/edit?edit={}">
+	<div class="form-group">
+		<label for="value">{}</label>
+		<input type="number" min="{}" max="{}" class="form-control" id="value" name="value" placeholder="Enter value" value="{}">
+	</div>
+	<div class="card-action">
+		<button class="btn btn-success">Save</button>
+	</div>
+</form>

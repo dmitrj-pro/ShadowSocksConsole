@@ -1,0 +1,10 @@
+<form method="POST" action="/settings/edit?edit={}">
+	<div class="form-check">
+		<label>{}</label><br>
+		{}
+	</div>
+	
+	<div class="card-action">
+		<button class="btn btn-success">Save</button>
+	</div>
+</form>

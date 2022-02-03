@@ -1,0 +1,60 @@
+<form method="POST" action="/server/edit?edit={}">
+	<div class="form-group">
+		<label for="name">Server name:</label>
+		<input type="text" class="form-control" id="name" name="name" placeholder="Enter server name" value="{}">
+	</div>
+	<div class="form-group">
+		<label for="host">Remote host domain or ip:</label>
+		<input type="text" class="form-control" id="host" name="host" placeholder="Enter host address" value="{}">
+	</div>
+	<div class="form-group">
+		<label for="port">Remote server port:</label>
+		<input type="text" class="form-control" id="port" name="port" placeholder="Enter server port" value="{}">
+	</div>
+	
+	<div class="form-check">
+		<label>Plugin:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="plugin" value="none" {}>
+			<span class="form-radio-sign">none</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="plugin" value="v2ray" {}>
+			<span class="form-radio-sign">V2Ray</span>
+		</label>
+	</div>
+	
+	<div class="form-check">
+		<label>[V2Ray] Enable TLS:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="v_tls" value="yes" {}>
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="v_tls" value="no" {}>
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
+	<div class="form-check">
+		<label>[V2Ray] Mode:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="v_mode" value="websocket" {}>
+			<span class="form-radio-sign">WebSocket</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="v_mode" value="quic" {}>
+			<span class="form-radio-sign">Quic</span>
+		</label>
+	</div>
+	<div class="form-group">
+		<label for="host">[V2Ray] Domain:</label>
+		<input type="text" class="form-control" id="host" name="v_host" placeholder="Enter host address" value="{}">
+	</div>
+	<div class="form-group">
+		<label for="port">[V2Ray] Path:</label>
+		<input type="text" class="form-control" id="host" name="v_path" placeholder="Enter virtual path on web server" value="{}">
+	</div>
+	<div class="card-action">
+		<button class="btn btn-success">Save</button>
+	</div>
+</form>

@@ -1,10 +1,11 @@
 #pragma once
-#include "TCPServer.h"
+#include <Network/TCPClient.h>
+#include <Network/TCPServer.h>
 #include <DPLib.conf.h>
 #include <Types/Exception.h>
 #include <algorithm>
 #include <mutex>
-#include <thread>
+#include <_Driver/ThreadWorker.h>
 #include "ConsoleLoop.h"
 
 using __DP_LIB_NAMESPACE__::String;
@@ -22,11 +23,11 @@ struct SSStream {
 		std::mutex * _bufferRead_locker = new std::mutex();
 		__DP_LIB_NAMESPACE__::IStrStream * bufferRead = new __DP_LIB_NAMESPACE__::IStrStream();
 		int bufferReadsize = 0;
-		std::thread * read_thread;
+		__DP_LIB_NAMESPACE__::Thread * read_thread;
 
 		std::mutex * _bufferSend_locker = new std::mutex();
 		__DP_LIB_NAMESPACE__::OStrStream * bufferSend = new __DP_LIB_NAMESPACE__::OStrStream();
-		std::thread * send_thread;
+		__DP_LIB_NAMESPACE__::Thread * send_thread;
 
 		enum class CurMode{None, Send, Read};
 		CurMode _mode = CurMode::Read;
@@ -34,8 +35,12 @@ struct SSStream {
 		bool is_exit = false;
 	public:
 		SSStream(std::function<void(char *, int)> sendf, std::function<char *(int)> readf, std::function<void()> _closef): _sendf(sendf), _readf(readf), _closef(_closef) {
-			read_thread = new std::thread(std::bind(&SSStream::ThreadRead, this));
-			send_thread = new std::thread(std::bind(&SSStream::ThreadSend, this));
+			read_thread = new __DP_LIB_NAMESPACE__::Thread(std::bind(&SSStream::ThreadRead, this));
+			send_thread = new __DP_LIB_NAMESPACE__::Thread(std::bind(&SSStream::ThreadSend, this));
+			read_thread->SetName("SSStream::ThreadRead");
+			send_thread->SetName("SSStream::ThreadSend");
+			read_thread->start();
+			send_thread->start();
 		}
 		void close() {
 			is_exit = true;
@@ -94,10 +99,10 @@ struct SSStream {
 					char * send = new char[val.size() + 1 + 1];
 					send [0] = val.size();
 					copy(val.begin(), val.end(), &(send[1]));
+					auto tr = DP_LOG_TRACE;
 					for (int i =0; i < val.size() + 2; i++) {
-						__DP_LIB_NAMESPACE__::log << (i==0 ? "" : " ") << (int)val[i];
+						tr << (i==0 ? "" : " ") << (int)val[i];
 					}
-					__DP_LIB_NAMESPACE__::log << "\n";
 					_sendf(send, val.size() + 1);
 					delete [] send;
 				}
@@ -116,11 +121,12 @@ struct SSStream {
 					is_exit = true;
 					break;
 				}
-				__DP_LIB_NAMESPACE__::log << "Readed: " << *data << ": ";
+				auto tr = DP_LOG_TRACE;
+				tr << "Readed: " << *data << ": ";
 				int size = *data;
 				char * readed = _readf(size);
 				String tmp = readed;
-				__DP_LIB_NAMESPACE__::log << tmp << "\n";
+				tr << tmp;
 
 				_bufferRead_locker->lock();
 				tmp = (bufferRead->eof()  ?  "" : bufferRead->str().substr( bufferRead->tellg() )) + tmp;
@@ -139,17 +145,18 @@ void getline(SSStream & str, String & res);
 
 class ShadowSocksServer{
 	private:
-		DP::NET::Server::Server *  _server;
+		__DP_LIB_NAMESPACE__::TCPServer *  _server;
 		__DP_LIB_NAMESPACE__::List<ConsoleLooper<SSStream,SSStream>> loppers;
 
 
 
 	public:
-		void Start(int port = 8898);
-		void StartInNewThread(int port = 8898);
+		void Start(const String & host, unsigned short port = 8898);
+		void StartInNewThread(const String & host, unsigned short port = 8898);
+		static bool IsCanConnect(const String & host, unsigned short port = 8898);
 		void Stop();
 
 
 
-		void onNewClient(int id);
+		void onNewClient(__DP_LIB_NAMESPACE__::TCPServerClient client);
 };

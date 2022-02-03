@@ -14,7 +14,11 @@
 #include "SSClient.h"
 #include "SSServer.h"
 #include "VERSION.h"
+#include "wwwsrc/WebUI.h"
 #include "TCPChecker.h"
+#include <Types/SmartPtr.h>
+#include "sha1.hpp"
+#include <unistd.h>
 
 #ifdef DP_WIN
 	#include <windows.h>
@@ -31,29 +35,10 @@ using __DP_LIB_NAMESPACE__::Vector;
 using __DP_LIB_NAMESPACE__::trim;
 using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::SmartParser;
+using __DP_LIB_NAMESPACE__::SmartPtr;
+using __DP_LIB_NAMESPACE__::OStrStream;
 
 
-
-#ifdef DP_WIN
-std::string GetLastErrorAsString()
-{
-	//Get the error message, if any.
-	DWORD errorMessageID = ::GetLastError();
-	if(errorMessageID == 0)
-		return std::string(); //No error message has been recorded
-
-	LPSTR messageBuffer = nullptr;
-	size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-								 NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
-
-	std::string message(messageBuffer, size);
-
-	//Free the buffer.
-	LocalFree(messageBuffer);
-
-	return message;
-}
-#endif
 
 class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 	private:
@@ -63,30 +48,52 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 		#endif
 		bool reopenConsole = true;
 		bool loggingEnabled = false;
+		ShadowSocksServer * service_server;
+
+		SmartPtr<WebUI> webui;
+		struct Host {
+			String host;
+			unsigned short port;
+		};
+		Host host_web;
+		Host host_service;
+
+
+		void readHostData();
+		String fileHostData() const;
+		void writeHostData();
+
 
 	public:
 		ShadowSocksMain():__DP_LIB_NAMESPACE__::ServiceMain("ShadowSocksConsole"){}
 
 		void serviceMain() {
-			//__DP_LIB_NAMESPACE__::log.OpenFile("LOGGING.txt");
+			DP_LOG_INFO << "Start " << getVersion() << " as service";
+			if (host_web.port > 0) {
+				if (!__DP_LIB_NAMESPACE__::TCPServer::portIsAllow(host_web.host, host_web.port)) {
+					this->SetExitCode(2);
+					DP_LOG_FATAL << "Can't listen host " << host_web.host << ":" << host_web.port;
+					return;
+				}
+				webui = SmartPtr<WebUI>(new WebUI(host_web.host, host_web.port));
+				webui->start();
+				DP_LOG_INFO << "Web server started on " << host_web.host << ":" << host_web.port;
+			}
 
-			__DP_LIB_NAMESPACE__::log << getVersion() << "\n";
-
-			__DP_LIB_NAMESPACE__::Ofstream out;
-			Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-			p = Path(p.GetFolder());
-			p.Append("__service__.txt");
-			out.open(p.Get());
-			out << "w";
-			out.close();
-			ShadowSocksServer * srv = new ShadowSocksServer();
-			ShadowSocksController::Get().SetExitFinc([srv]() {
-				srv->Stop();
+			service_server = new ShadowSocksServer();
+			ShadowSocksController::Get().SetExitFinc([this]() {
+				service_server->Stop();
 			});
 
-			srv->Start();
+			if (!__DP_LIB_NAMESPACE__::TCPServer::portIsAllow(host_service.host, host_service.port)) {
+				this->SetExitCode(2);
+				DP_LOG_FATAL << "Can't listen host " << host_service.host << ":" << host_service.port;
+				return;
+			}
 
-			__DP_LIB_NAMESPACE__::RemoveFile(p.Get());
+			DP_LOG_INFO << "Try to start service host " << host_service.host << ":" << host_service.port;
+			service_server->Start(host_service.host, host_service.port);
+			DP_LOG_INFO << "ShadowSocksConsole service stoped";
 		}
 		void consoleMain();
 
@@ -109,8 +116,18 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 		}
 		void _MainExit0(){}
 		virtual void MainExit() override {
+			this->SetNeedToExit(true);
+			DP_LOG_WARNING << "Received close";
+			if (isService()) {
+				service_server->Stop();
+			} else {
+				close(0);
+			}
 			ShadowSocksController::Get().SetExitFinc(std::bind(&ShadowSocksMain::_MainExit0, this));
 			ShadowSocksController::Get().MakeExit();
+			if (!webui.isNull()) {
+				webui->stop();
+			}
 			#ifdef DP_QT_GUI
 				if (app != nullptr) {
 					gui->close();
@@ -131,7 +148,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			try{
 				ShadowSocksController::Get().OpenConfig(password);
 			} catch (__DP_LIB_NAMESPACE__::LineException e) {
-				__DP_LIB_NAMESPACE__::log << "Fail set password:" << e.toString() << "\n";
+				DP_LOG_WARNING << "Fail set password:" << e.toString() << "\n";
 			}
 		}
 		inline void onFailArg() {
@@ -163,6 +180,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			this->SetNeedToExit(true);
 		}
 		inline void asservice() {
+			this->fakeService();
 			serviceMain();
 			this->SetNeedToExit(true);
 		}
@@ -178,11 +196,20 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 		}
 
 		inline void enableLogging() {
-			__DP_LIB_NAMESPACE__::log.OpenFile("LOGGING.txt");
+			__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+			logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+			logF.Append("LOGGING.txt");
+			__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
+			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
+			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
 			loggingEnabled = true;
+		}
+		inline void ForceReadConfig() {
+			ShadowSocksController::Get().setForceReadConfigMode();
 		}
 
 		virtual void PreStart() override {
+			readHostData();
 			srand(time(nullptr));
 			ShadowSocksController::Create(new _ShadowSocksController());
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::autoStart, "Auto start tasks", "start", "-e", "--e", "-start", "--start");
@@ -194,18 +221,24 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::start, "Start service", "start");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::stop, "Stop service", "stop");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::asservice, "start as service", "sexecute");
+			DP_SM_addArgumentHelp0(&ShadowSocksMain::ForceReadConfig, "Disable check checksum in config", "no-check-hashe");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::version, "Show application version", "version");
+			DP_SM_addArgumentHelp0(&ShadowSocksMain::writeHostData, "Write file with default service host:port", "write-ports");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::enableLogging, "Enable logging", "log");
 
 			AddHelp(std::cout, [this]() { this->SetNeedToExit(true); }, "help", "-help", "--help", "-h", "--h", "?");
 		}
 };
 
+
+
+
 void ShadowSocksMain::consoleMain() {
+	__DP_LIB_NAMESPACE__::log.SetChannel(nullptr);
 	#ifdef DP_WIN
 		if (reopenConsole) {
 		if (!AllocConsole()) {
-			__DP_LIB_NAMESPACE__::log << "Fail to create console: " << GetLastErrorAsString() << "\n";
+			DP_LOG_ERROR << "Fail to create console: " <<  __DP_LIB_NAMESPACE__::GetLastErrorAsString() << "\n";
 			//return;
 		} else {
 			freopen("CONIN$", "r", stdin);
@@ -216,16 +249,67 @@ void ShadowSocksMain::consoleMain() {
 
 	#endif
 
-	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-	p = Path(p.GetFolder());
-	p.Append("__service__.txt");
-	if (p.IsFile()) {
+//	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+//	p = Path(p.GetFolder());
+//	p.Append("__service__.txt");
+	//if (p.IsFile()) {
+	//if (ShadowSocksServer::IsCanConnect(44444)) {
+	if (ShadowSocksServer::IsCanConnect(host_service.host, host_service.port)) {
 		ShadowSocksRemoteClient cl;
-		cl.Start();
+		cl.Start(host_service.host, host_service.port);
 	} else {
+		if (host_web.port > 0) {
+			webui = SmartPtr<WebUI>(new WebUI(host_web.host, host_web.port));
+			webui->start();
+		}
+
 		auto looper = makeLooper(std::cout, std::cin);
 		looper->Loop();
 	}
+}
+
+void ShadowSocksMain::readHostData() {
+	__DP_LIB_NAMESPACE__::Path file = __DP_LIB_NAMESPACE__::Path(fileHostData());
+	if (file.IsFile()) {
+		Ifstream in;
+		in.open(file.Get());
+		SmartParser webhost ("web_host${1:null<string>}=${host:trim<string>}:${port:int}");
+		SmartParser cchost ("service_host${1:null<string>}=${host:trim<string>}:${port:int}");
+		while (!in.eof()) {
+			String line;
+			getline(in, line);
+			if (webhost.Check(line)) {
+				host_web.host = webhost.Get("host");
+				host_web.port = parse<unsigned short>(webhost.Get("port"));
+			}
+			if (cchost.Check(line)) {
+				host_service.host = cchost.Get("host");
+				host_service.port = parse<unsigned short>(cchost.Get("port"));
+			}
+		}
+	} else {
+		host_web.host = "127.0.0.1";
+		host_web.port = 0;
+		host_service.host = "127.0.0.1";
+		host_service.port = 8898;
+	}
+}
+
+String ShadowSocksMain::fileHostData() const {
+	__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+	logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+	logF.Append("PORTS.txt");
+	return logF.Get();
+}
+
+void ShadowSocksMain::writeHostData() {
+	__DP_LIB_NAMESPACE__::Path file = __DP_LIB_NAMESPACE__::Path(fileHostData());
+	__DP_LIB_NAMESPACE__::Ofstream out;
+	out.open(file.Get());
+	out << "web_host=" << host_web.host << ":" << host_web.port << "\n";
+	out << "service_host=" << host_service.host << ":" << host_service.port << "\n";
+	out.close();
+	SetNeedToExit(true);
 }
 
 
@@ -263,6 +347,32 @@ void ShadowSocksMain::consoleMain() {
 #define SetType(X, Var) \
 	setting.add(X, __DP_LIB_NAMESPACE__::toString(Var));
 
+bool ShadowSocksSettings::IsCorrect(_RunParams r) {
+	if (r.isNull)
+		return false;
+	bool inited = false;
+
+	for (const _RunParams & tmp : this->runParams)
+		if (tmp.name == r.name)
+			return false;
+
+	for (const Tun2SocksConfig & tmp : this->tun2socksConf)
+		if (tmp.name == r.tun2SocksName)
+			inited = true;
+
+	if (!inited && (r.tun2SocksName.size() > 0))
+		return false;
+	return true;
+}
+
+void ShadowSocksSettings::deleteRunParamsByName(const String & name) {
+	for (auto it = this->runParams.begin(); it != this->runParams.end(); it++)
+		if (it->name == name) {
+			this->runParams.erase(it);
+			break;
+		}
+}
+
 bool ShadowSocksSettings::CheckTask(_Task * t) {
 	for (int id : t->servers_id) {
 		bool c = false;
@@ -276,10 +386,10 @@ bool ShadowSocksSettings::CheckTask(_Task * t) {
 		if (tmp->name == t->name)
 			return false;
 	bool inited = false;
-	for (const Tun2SocksConfig & tmp : this->tun2socksConf)
-		if (tmp.name == t->tun2SocksName)
+	for (const _RunParams & tmp : this->runParams)
+		if (tmp.name == t->runParamsName)
 			inited = true;
-	if (!inited && (t->tun2SocksName.size() > 0))
+	if (!inited && (t->runParamsName.size() > 0))
 		return false;
 	return t->Check();
 }
@@ -305,6 +415,22 @@ Tun2SocksConfig ShadowSocksSettings::findVPNbyName(const String & name) {
 			return t;
 		}
 	return Tun2SocksConfig();
+}
+
+_RunParams ShadowSocksSettings::findRunParamsbyName(const String & name) const {
+	for (const _RunParams & t : runParams)
+		if (t.name == name) {
+			return t;
+		}
+	return _RunParams();
+}
+_RunParams ShadowSocksSettings::findDefaultRunParams()const  {
+	const String & name = "DEFAULT";
+	for (const _RunParams & t : runParams)
+		if (t.name == name) {
+			return t;
+		}
+	return _RunParams();
 }
 
 _Task * ShadowSocksSettings::findTaskByName(const String & name) {
@@ -378,7 +504,7 @@ String ShadowSocksSettings::replaceVariables(const String & src) const {
 	return parser.ToString();
 }
 
-String ShadowSocksSettings::replacePath(const String & path, bool is_dir) {
+String ShadowSocksSettings::replacePath(const String & path, bool is_dir) const {
 	__DP_LIB_NAMESPACE__::SmartParser parser(path);
 	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
 	p = Path(p.GetFolder());
@@ -415,9 +541,25 @@ String convertTime(UInt time) {
 	return res;
 }
 
-TCPChecker::TCPCheckerLoop TCP_CHECKER;
-
-ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const MakeServerFlags & flags) {
+ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const SSClientFlags & flags) {
+	static List<__DP_LIB_NAMESPACE__::Pair<TCPChecker::TCPCheckerLoop *, __DP_LIB_NAMESPACE__::Thread * >> check_list;
+	{
+		bool deleted = true;
+		while (deleted) {
+			deleted = false;
+			for (auto it = check_list.begin(); it != check_list.end(); it++)
+				if ((*it).second->isFinished()){
+					deleted = true;
+					TCPChecker::TCPCheckerLoop * loop = it->first;
+					__DP_LIB_NAMESPACE__::Thread * thread = it->second;
+					check_list.erase(it);
+					thread->join();
+					delete thread;
+					delete loop;
+					break;
+				}
+		}
+	}
 	_Task * tk = nullptr;
 
 	// Находим таску
@@ -430,20 +572,30 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const MakeServerFlag
 		DP_PRINT_TEXT("Task is not found.");
 		throw EXCEPTION("Task is not found.");
 	}
+	_RunParams run_params = findRunParamsbyName(tk->runParamsName);
+	if (run_params.isNull) {
+		DP_PRINT_TEXT("Running parametrs for task is not set");
+		throw EXCEPTION("Running parametrs for task is not set");
+	}
 
 	// Находим настройки для VPN
-	if (flags.vpn_name.size() > 0)
-		tk->tun2SocksName = flags.vpn_name;
+	if (flags.vpnName.size() > 0)
+		run_params.tun2SocksName = flags.vpnName;
 	Tun2SocksConfig conf;
-	for (const Tun2SocksConfig & c : this->tun2socksConf)
-		if (c.name == tk->tun2SocksName) {
-			conf = c;
-			break;
-		}
-	if (tk->tun2SocksName.size() > 0 && conf.isNull) {
+	if (flags.runVPN == true) {
+		for (const Tun2SocksConfig & c : this->tun2socksConf)
+			if (c.name == run_params.tun2SocksName) {
+				conf = c;
+				break;
+			}
+	}
+	if (run_params.tun2SocksName.size() > 0 && conf.isNull && flags.runVPN == true) {
 		DP_PRINT_TEXT("VPN Config is not found.");
 		throw EXCEPTION("VPN Config is not found.");
 	}
+
+	if (flags.listen_host.size() > 0)
+		run_params.localHost = flags.listen_host;
 
 
 	conf.hideDNS2Socks = hideDNS2Socks;
@@ -465,9 +617,33 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const MakeServerFlag
 		throw EXCEPTION("Servers is not linked");
 	}
 
+	if (flags.multimode == SSClientFlagsBoolStatus::True)
+		run_params.multimode = true;
+	if (flags.multimode == SSClientFlagsBoolStatus::False)
+		run_params.multimode = false;
+
+	if (srvs.size() == 1) {
+		run_params.multimode = false;
+	}
+
 	// Находим первый "живой" сервер
-	_Server * srv_res = TCP_CHECKER.Check(srvs, bootstrapDNS, IGNORECHECKSERVER, [this](const String & txt) { return this->replaceVariables(txt); });
-	if (srv_res == nullptr) {
+	TCPChecker::TCPCheckerLoop * checker = new TCPChecker::TCPCheckerLoop();
+	_Server * srv_res = nullptr;
+	List<_Server*> srv_ress;
+	if (! run_params.multimode)
+		srv_res = checker->Check((this->enableDeepCheckServer && flags.deepCheck) ? tk : nullptr, srvs, bootstrapDNS, IGNORECHECKSERVER, [this](const String & txt) { return this->replaceVariables(txt); });
+	else
+		srv_ress = checker->CheckAll((this->enableDeepCheckServer && flags.deepCheck) ? tk : nullptr, srvs, bootstrapDNS, IGNORECHECKSERVER, [this](const String & txt) { return this->replaceVariables(txt); });
+
+	// join-им в отдельном потоке, чтобы не засирать основной поток
+	__DP_LIB_NAMESPACE__::Thread * joinChecker = new __DP_LIB_NAMESPACE__::Thread([checker](){
+		checker->Join();
+	});
+	joinChecker->SetName("TCPChecker Join Thread");
+	joinChecker->start();
+	check_list.push_back(__DP_LIB_NAMESPACE__::Pair<TCPChecker::TCPCheckerLoop *, __DP_LIB_NAMESPACE__::Thread * >(checker, joinChecker));
+
+	if (srv_res == nullptr && srv_ress.size() == 0) {
 		throw EXCEPTION("Can't connect to servers");
 		return nullptr;
 	}
@@ -475,22 +651,30 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const MakeServerFlag
 	// Создаем запускаемую таску
 	_Task * r = tk->Copy([this](const String & txt) { return this->replaceVariables(txt); });
 	// Устанавливаем параметры Socks сервера
-	if (r->localHost.size() < 1)
-		r->localHost = this->defaultHost;
-	if (r->localPort < 1)
-		r->localPort = this->defaultPort;
 	for (_Tun & tun : r->tuns)
-		tun.localHost = r->localHost.size() < 1 ? defaultHost : r->localHost;
+		tun.localHost = run_params.localHost;
 
 	// Создаем запускатор
 	ShadowSocksClient * res = nullptr;
-	res = new ShadowSocksClient(srv_res, r, conf);
+	if (!conf.isNull && autoDetectTunInterface) {
+		conf.defaultRoute = Tun2Socks::DetectDefaultRoute();
+		conf.tunName = Tun2Socks::DetectInterfaceName();
+		if (conf.defaultRoute.size() == 0)
+			throw EXCEPTION("Can't auto detect default route");
+		if (conf.tunName.size() == 0)
+			throw EXCEPTION("Can't auto detect default TAP interface");
+	}
+	if (! run_params.multimode)
+		res = new ShadowSocksClient(srv_res, r, run_params, conf);
+	else {
+		res = new ShadowSocksClient(nullptr, r, run_params, conf);
+		res->SetMultiModeServers(srv_ress);
+	}
+
 
 	// Устанавливаем глобальные настройки запуска
 	res->SetShadowSocksPath(this->replacePath(this->shadowSocksPath));
 	res->SetV2RayPluginPath(this->replacePath(this->v2rayPluginPath));
-	res->SetPolipoPath(this->replacePath(this->polipoPath));
-	res->SetSysProxyPath(this->replacePath(this->sysproxyPath));
 	res->SetTempPath(this->replacePath(this->tempPath, true));
 	res->SetUDPTimeout(convertTime(this->udpTimeout));
 	Tun2Socks::SetT2SPath(this->replacePath(this->tun2socksPath));
@@ -499,43 +683,92 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const MakeServerFlag
 	return res;
 }
 
+String ShadowSocksSettings::getWGetPath() const {
+	#ifdef DP_LIN
+		if (fixLinuxWgetPath) {
+			Path  p = Path("/usr/local/bin/wget");
+			if (p.IsFile())
+				return p.Get();
+			p = Path("/bin/wget");
+			if (p.IsFile())
+				return p.Get();
+			p = Path("/usr/bin/wget");
+			if (p.IsFile())
+				return p.Get();
+		}
+	#endif
+	return this->replacePath(this->wgetPath);
+}
+
 bool _ShadowSocksController::CheckInstall() {
-	__DP_LIB_NAMESPACE__::log << "Checking install\n";
-	__DP_LIB_NAMESPACE__::log << "Check SS\n";
+	DP_LOG_DPDEBUG << "Checking install\n";
+	DP_LOG_DPDEBUG << "Check SS\n";
 	__DP_LIB_NAMESPACE__::Path p(settings.replacePath(settings.shadowSocksPath));
 	if (!p.IsFile())
 		return false;
-	__DP_LIB_NAMESPACE__::log << "Check V2Ray\n";
+	DP_LOG_DPDEBUG << "Check V2Ray\n";
 	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.v2rayPluginPath));
 	if (!p.IsFile())
 		return false;
-	__DP_LIB_NAMESPACE__::log << "Check T2S\n";
+	DP_LOG_DPDEBUG << "Check T2S\n";
 	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.tun2socksPath));
 	if (!p.IsFile())
 		return false;
-	__DP_LIB_NAMESPACE__::log << "Check D2S\n";
+	DP_LOG_DPDEBUG << "Check D2S\n";
 	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.dns2socksPath));
 	if (!p.IsFile())
 		return false;
-	__DP_LIB_NAMESPACE__::log << "Check polipo\n";
-	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.polipoPath));
-	if (!p.IsFile())
-		return false;
 	#ifdef DP_WIN
-		__DP_LIB_NAMESPACE__::log << "Check sysproxy\n";
-		p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.sysproxyPath));
-		if (!p.IsFile())
-			return false;
-	#endif
-	#ifdef DP_WIN
-		__DP_LIB_NAMESPACE__::log << "Check wget\n";
-		p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.wgetPath));
+		DP_LOG_DPDEBUG << "Check wget\n";
+		p = __DP_LIB_NAMESPACE__::Path(settings.getWGetPath());
 		if (!p.IsFile())
 			return false;
 	#endif
 	return true;
 }
 
+String ShadowSocksSettings::GetSourceCashe() {
+	__DP_LIB_NAMESPACE__::Setting setting;
+	Set("Checker.Server_Name", this->__checker_server_name);
+	Set("Checker.Task_Name", this->__checker_task_name);
+
+	for (_Server* sr: servers) {
+		String key = "Servers." + toString(sr->id) + ".";
+		Set(key + "ip", sr->check_result.ipAddr);
+		SetType(key + "speed" , sr->check_result.speed);
+		Set(key + "speed_s", sr->check_result.speed_s);
+		SetType(key + "is_run" , sr->check_result.isRun);
+		Set(key + "msg", sr->check_result.msg);
+	}
+
+	__DP_LIB_NAMESPACE__::OStrStream _out;
+	_out << setting;
+	return _out.str();
+}
+
+void ShadowSocksSettings::LoadCashe(const String & text) {
+	__DP_LIB_NAMESPACE__::IStrStream in;
+	in.str(text);
+
+	__DP_LIB_NAMESPACE__::Setting setting;
+	in * setting;
+
+	//ToDO
+	ReadN("Checker.Server_Name", this->__checker_server_name);
+	ReadN("Checker.Task_Name", this->__checker_task_name);
+	auto serversList = setting.getFolders<List<String>>("Servers");
+	for (String id : serversList) {
+		String key = "Servers." + id + ".";
+		_Server * sr = findServerById(parse<int>(id));
+		if (sr == nullptr)
+			continue;
+		ReadN(key + "ip", sr->check_result.ipAddr);
+		ReadNType(key + "speed" , sr->check_result.speed, double);
+		ReadN(key + "speed_s", sr->check_result.speed_s);
+		ReadNType(key + "is_run" , sr->check_result.isRun, bool);
+		ReadN(key + "msg", sr->check_result.msg);
+	}
+}
 String ShadowSocksSettings::GetSource() {
 	__DP_LIB_NAMESPACE__::Setting setting;
 
@@ -578,12 +811,9 @@ String ShadowSocksSettings::GetSource() {
 		Set(key + "name", tk->name);
 		Set(key + "password", tk->password);
 		Set(key + "method", tk->method);
-		SetType(key + "localport", tk->localPort);
 		SetType(key + "autostart", tk->autostart);
-		Set(key + "localhost", tk->localHost);
-		Set(key + "VPN", tk->tun2SocksName);
-		SetType(key + "httpport", tk->httpProxy);
-		SetType(key + "SystemProxy", tk->systemProxy);
+		Set(key + "RunParams", tk->runParamsName);
+		SetType(key + "EnableIPv6", tk->enable_ipv6);
 		String ids = "";
 		for (int id : tk->servers_id)
 			ids = ids + toString(id) + ";";
@@ -603,26 +833,48 @@ String ShadowSocksSettings::GetSource() {
 
 	}
 
+	for (const _RunParams & tk : runParams) {
+		String key = "RunParams." + toString(tk.name) + ".";
+		Set(key + "name", tk.name);
+		SetType(key + "localport", tk.localPort);
+		Set(key + "localhost", tk.localHost);
+		Set(key + "VPN", tk.tun2SocksName);
+		SetType(key + "httpport", tk.httpProxy);
+		SetType(key + "SystemProxy", tk.systemProxy);
+		SetType(key + "multimode", tk.multimode);
+	}
+
 	{
 		String key = "System.Settings.";
-		Set(key + "localhost", this->defaultHost);
-		SetType(key + "localport", this->defaultPort);
 		SetType(key + "autostart", this->autostart);
 		Set(key + "ShadowSocksPath", this->shadowSocksPath);
 		Set(key + "V2RayPath", this->v2rayPluginPath);
 		Set(key + "Tun2Socks", this->tun2socksPath);
 		Set(key + "Dns2Socks", this->dns2socksPath);
-		SetType(key + "HttpProxyPort", this->defaultHttpPort);
-		Set(key + "SysProxyPath", this->sysproxyPath);
 		Set(key + "WGetPath", this->wgetPath);
-		Set(key + "PolipoPath", this->polipoPath);
 		Set(key + "tempPath", this->tempPath);
 		SetType(key + "UDPTimeout", this->udpTimeout);
 		SetType(key + "ignoreCheck", this->IGNORECHECKSERVER);
 		SetType(key + "hideDNS2Socks", this->hideDNS2Socks);
+		SetType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath);
+		SetType(key + "enableDeepCheckServer", this->enableDeepCheckServer);
+		SetType(key + "autoDetectTunInterface", this->autoDetectTunInterface);
 		SetType(key + "enableLogging", this->enableLogging);
 		Set(key + "BootstrapDNS", this->bootstrapDNS);
-
+		String tmp = ShadowSocksSettings::auto_to_str(this->auto_check_mode);
+		Set(key + "AutoCheckingMode", tmp);
+		SetType(key + "AutoCheckingIntervalS", this->auto_check_interval_s);
+		Set(key + "AutoCheckingIpUrl", this->auto_check_ip_url);
+		Set(key + "AutoCheckingDownloadUrl", this->auto_check_download_url);
+	}
+	{
+		static const String control = "System.Settings.ShadowSocksPath";
+		SHA1 checksum;
+		checksum.update(this->shadowSocksPath);
+		if (checksum.isFail())
+			Set("Core.Crypt.Hash2", "c950ec0ba1ebbf212b155d39d000d2fbb46eafe4");
+		String r = checksum.final();
+		Set("Core.Crypt.Hash2", r);
 	}
 
 	{
@@ -637,7 +889,7 @@ String ShadowSocksSettings::GetSource() {
 	return _out.str();
 }
 
-void ShadowSocksSettings::Load(const String & text) {
+void ShadowSocksSettings::Load(const String & text, bool force) {
 	__DP_LIB_NAMESPACE__::IStrStream in;
 	in.str(text);
 
@@ -704,12 +956,11 @@ void ShadowSocksSettings::Load(const String & text) {
 		ReadN(key + "name", tk->name);
 		Read(key + "password", tk->password);
 		Read(key + "method", tk->method);
-		ReadNType(key + "localport", tk->localPort, int);
 		ReadNType(key + "autostart", tk->autostart, bool);
-		ReadNType(key + "httpport", tk->httpProxy, int);
-		ReadNType(key + "SystemProxy", tk->systemProxy, bool);
-		ReadN(key + "localhost", tk->localHost);
-		ReadN(key + "VPN", tk->tun2SocksName);
+		ReadNType(key + "EnableIPv6", tk->enable_ipv6, bool);
+		ReadN(key + "RunParams", tk->runParamsName);
+		if (tk->runParamsName.size() == 0)
+			tk->runParamsName = "DEFAULT";
 		String ids = "";
 		ReadN(key + "servers", ids);
 		auto ll = __DP_LIB_NAMESPACE__::split(ids, ';');
@@ -735,25 +986,79 @@ void ShadowSocksSettings::Load(const String & text) {
 
 		tasks.push_back(tk);
 	}
+	auto runList = setting.getFolders<List<String>>("RunParams");
+	for (String id : runList) {
+		String key = "RunParams." + id + ".";
+		_RunParams tk;
+
+		Read(key + "name", tk.name);
+		ReadType(key + "localport", tk.localPort, int);
+		Read(key + "localhost", tk.localHost);
+		ReadN(key + "VPN", tk.tun2SocksName);
+		ReadNType(key + "httpport", tk.httpProxy, int);
+		ReadNType(key + "SystemProxy", tk.systemProxy, bool);
+		ReadNType(key + "multimode", tk.multimode, bool);
+		tk.isNull = false;
+
+		runParams.push_back(tk);
+	}
+	{
+		bool containsDefault =false;
+		for (const _RunParams & p : runParams)
+			if (p.name == "DEFAULT")
+				containsDefault = true;
+		if (!containsDefault) {
+			_RunParams tk;
+			tk.name = "DEFAULT";
+			tk.isNull = false;
+			tk.httpProxy = -1;
+			tk.localHost = "127.0.0.1";
+			tk.localPort = 1080;
+			tk.multimode = false;
+			tk.systemProxy = false;
+			tk.tun2SocksName = "";
+			runParams.push_back(tk);
+		}
+	}
+
 	{
 		String key = "System.Settings.";
-		ReadN(key + "localhost", this->defaultHost);
-		ReadNType(key + "localport", this->defaultPort, int);
 		ReadNType(key + "autostart", this->autostart, bool);
 		ReadN(key + "ShadowSocksPath", this->shadowSocksPath);
 		ReadN(key + "V2RayPath", this->v2rayPluginPath);
 		ReadN(key + "Tun2Socks", this->tun2socksPath);
 		ReadN(key + "Dns2Socks", this->dns2socksPath);
-		ReadNType(key + "HttpProxyPort", this->defaultHttpPort, int);
-		ReadN(key + "SysProxyPath", this->sysproxyPath);
 		ReadN(key + "WGetPath", this->wgetPath);
-		ReadN(key + "PolipoPath", this->polipoPath);
 		ReadN(key + "tempPath", this->tempPath);
 		ReadNType(key + "UDPTimeout", this->udpTimeout, UInt);
 		ReadNType(key + "ignoreCheck", this->IGNORECHECKSERVER, bool);
 		ReadNType(key + "hideDNS2Socks", this->hideDNS2Socks, bool);
+		ReadNType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath, bool);
+		ReadNType(key + "autoDetectTunInterface", this->autoDetectTunInterface, bool);
+		ReadNType(key + "enableDeepCheckServer", this->enableDeepCheckServer, bool);
 		ReadNType(key + "enableLogging", this->enableLogging, bool);
 		ReadN(key + "BootstrapDNS", this->bootstrapDNS);
+		String tmp = "Off";
+		ReadN(key + "AutoCheckingMode", tmp);
+		this->auto_check_mode = ShadowSocksSettings::str_to_auto(tmp);
+		ReadNType(key + "AutoCheckingIntervalS", this->auto_check_interval_s, UInt);
+		ReadN(key + "AutoCheckingIpUrl", this->auto_check_ip_url);
+		ReadN(key + "AutoCheckingDownloadUrl", this->auto_check_download_url);
+	}
+
+	{
+		static const String control = "System.Settings.ShadowSocksPath";
+		SHA1 checksum;
+		checksum.update(this->shadowSocksPath);
+		String hash = "";
+		ReadN("Core.Crypt.Hash2", hash);
+
+		if (checksum.isFail())
+			if (hash != "c950ec0ba1ebbf212b155d39d000d2fbb46eafe4" && !force)
+				throw EXCEPTION("Bad password");
+		String r = checksum.final();
+		if (r != hash && !force)
+			throw EXCEPTION("Bad password");
 	}
 
 	{

@@ -1,0 +1,68 @@
+<form method="POST" action="/task/start_params?start={}">
+	<div class="form-check">
+		<label>Check servers:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="CHECK" value="yes" checked="" {}>
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="CHECK" value="no" {}>
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
+	
+	<div class="form-check">
+		<label>Disable VPN:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="NOVPN" value="yes" {}>
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="NOVPN" value="no" {}>
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
+	
+	<div class="form-check">
+		<label>Enable SysProxy:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="sysproxy" value="yes" {}>
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="sysproxy" value="no" {}>
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
+	<div class="form-check">
+		<label>Enable multiple connections to all nodes (TCP Only):</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="multimode" value="yes" {}>
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="multimode" value="no" {}>
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
+	
+	<div class="form-group">
+		<label for="local_port">Local Socks5 port (1080?)</label>
+		<input type="number" min="-1" max="65536" class="form-control" id="local_port" name="local_port" placeholder="Enter local socks5 port" value="{}">
+	</div>
+	<div class="form-group">
+		<label for="local_http_port">Local Http-proxy port (8080?)</label>
+		<input type="number" min="-1" max="65536" class="form-control" id="local_http_port" name="local_http_port" placeholder="Enter local http port" value="{}">
+	</div>
+	<div class="form-check">
+		<label>VPN:</label><br>
+		{}
+	</div>
+	<div class="form-check">
+		<label>Select server:</label><br>
+		{}
+	</div>
+	<div class="card-action">
+		<button class="btn btn-success">Start</button>
+	</div>
+</form>

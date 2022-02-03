@@ -1,7 +1,7 @@
 #pragma once
 #include <DPLib.conf.h>
 #include <_Driver/Application.h>
-#include <thread>
+#include <_Driver/ThreadWorker.h>
 #include "ShadowSocksMain.h"
 #include <Converter/Converter.h>
 #include <Generator/CodeGenerator.h>
@@ -21,7 +21,7 @@ struct Tun2Socks {
 		String udpTimeout = "1m0s";
 
 		bool & _is_exit;
-		std::thread * deleteDefault = nullptr;
+		__DP_LIB_NAMESPACE__::Thread * deleteDefault = nullptr;
 
 		#ifdef DP_WIN
 			String DetectTunAdapterIF(const String & name);
@@ -45,7 +45,7 @@ struct Tun2Socks {
 		Tun2Socks():_is_exit(*(new bool(false))) {}
 		inline static void SetT2SPath(const String & p) { appPath = p; }
 		inline static void SetD2SPath(const String & p) { tun2socksPath = p; }
-		void Start(std::function<void()> _onSuccess, std::function<void()> _onCrash);
+		void Start(std::function<void()> _onSuccess, OnShadowSocksError _onCrash);
 		void Stop();
 		void DisableCrashFunc();
 		void ThreadLoop();

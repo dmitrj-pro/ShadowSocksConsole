@@ -1,0 +1,46 @@
+						<script>
+							function redirectPost(url, name, value) {
+								var form = document.createElement('form');
+								
+								document.body.appendChild(form);
+								form.method = 'post';
+								form.action = url;
+								var input = document.createElement('input');
+								input.type = 'hidden';
+								input.name = name;
+								input.value = value;
+								form.appendChild(input);
+
+								form.submit();
+								document.body.removeChild(form);
+							}
+							function doEdit(id) {
+								location.href = "/server/edit?edit=" + id.toString();
+							}
+							function doDelete(id) {
+								location.href = "/server/delete?delete=" + id.toString();
+								return true;
+							}
+							function doNew() {
+								location.href = "/server/new";
+							}
+						</script>
+						<i class="la la-plus" onclick="doNew()"></i>
+						<table class="table table-hover sortable">
+							<thead>
+								<tr>
+									<th scope="col">#</th>
+									<th scope="col">Name</th>
+									<th scope="col">Host:Port</th>
+									<th scope="col">Plugin</th>
+									<th scope="col">Mode</th>
+									<th scope="col">Enable TLS</th>
+									<th scope="col">Path</th>
+									<th scope="col">Status</th>
+									<th scope="col">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{}
+							</tbody>
+						</table>

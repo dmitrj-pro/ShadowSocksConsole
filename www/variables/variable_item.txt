@@ -1,0 +1,5 @@
+								<tr>
+									<td scope="col">{}</td>
+									<td scope="col">{}</td>
+									<td scope="col"><i class="la la-edit" onclick="doEdit('{}')"></i> <i class="la la-trash" onclick="doDelete('{}')"></i></td>
+								</tr>

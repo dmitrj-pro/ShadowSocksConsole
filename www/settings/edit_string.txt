@@ -1,0 +1,9 @@
+<form method="POST" action="/settings/edit?edit={}">
+	<div class="form-group">
+		<label for="name">{}</label>
+		<input type="text" class="form-control" id="value" name="value" placeholder="Enter variable value" value="{}">
+	</div>
+	<div class="card-action">
+		<button class="btn btn-success">Save</button>
+	</div>
+</form>

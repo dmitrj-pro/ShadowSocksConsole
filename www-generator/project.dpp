@@ -1,0 +1,41 @@
+TYPE = console
+
+[!DP_LIB]
+THROW=Dmitrj PRO Lib is not set. Install this lib and set in PMake.
+[]
+[!DP_LIB_LIB]
+THROW=Dmitrj PRO Lib is not set. Install this lib and set in PMake.
+[]
+
+CXXFLAGS=-std=c++11
+
+LIBS = DP_LIB_LIB
+INCLUDE = DP_LIB
+
+[WINDOWS]
+CXXFLAGS=-DDP_WIN
+CXXFLAGS=-DDP_WINDOWS
+[]
+[LINUX]
+CXXFLAGS=-DDP_LIN
+CXXFLAGS=-DDP_LINUX
+[]
+
+LIBS = -static-libstdc++, -static-libgcc, -pthread
+
+OUT = generate-html
+
+SOURCE = ./main.cpp
+HEADER = ./Connecters/LocalConnecter.h
+SOURCE = ./Connecters/LocalConnecter.cpp
+HEADER = ./Connecters/Finder.h
+SOURCE = ./Connecters/Finder.cpp
+HEADER = ./Zip/Zip.h
+SOURCE = ./Zip/Zip.cpp
+HEADER = ./Zip/zip_file.hpp
+
+{Generate www}
+	RES=bash generate-html.sh
+{}
+
+HEADER = ./Zip/zip-pack.h

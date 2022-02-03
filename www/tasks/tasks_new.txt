@@ -1,0 +1,66 @@
+<form method="POST">
+	<div class="form-group">
+		<label for="name">Task name:</label>
+		<input type="text" class="form-control" id="name" name="name" placeholder="Enter task name" value="">
+	</div>
+	
+	<div class="form-check">
+		<label>Method:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="method" value="AEAD_CHACHA20_POLY1305">
+			<span class="form-radio-sign">AEAD_CHACHA20_POLY1305</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="method" value="AEAD_AES_128_GCM">
+			<span class="form-radio-sign">AEAD_AES_128_GCM</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="method" value="AEAD_AES_256_GCM">
+			<span class="form-radio-sign">AEAD_AES_256_GCM</span>
+		</label>
+	</div>
+	
+	<div class="form-group">
+		<label for="password">Password:</label>
+		<textarea class="form-control" id="password" name="password" rows="5"></textarea>
+	</div>
+	
+	<div class="form-check">
+		<label>Enable IPv6 (for Mobile):</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="ipv6" value="yes">
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="ipv6" value="no">
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
+	
+	<div class="form-check">
+		<label>Enable autostart:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="autostart" value="yes">
+			<span class="form-radio-sign">enable</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="autostart" value="no" checked="">
+			<span class="form-radio-sign">disable</span>
+		</label>
+	</div>
+	
+	<div class="form-check">
+		<label>Run Params:</label><br>
+		{}
+	</div>
+	
+	<div class="form-group">
+		<label for="servers">Select servers</label>
+		<select multiple="" class="form-control" id="servers" name="servers">
+			{}
+		</select>
+	</div>
+	<div class="card-action">
+		<button class="btn btn-success">Add</button>
+	</div>
+</form>

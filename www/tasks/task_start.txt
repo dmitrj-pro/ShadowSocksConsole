@@ -1,0 +1,1 @@
+<i id="doStartButton_{}" class="la la-play" onclick="doStart({})"></i> <i id="doExtendetStartButton_{}" class="la la-youtube-play" onclick="doStartSettings({})"></i><i id="doCheckButton_{}" class="la la-refresh" onclick="doCheck({})"></i>

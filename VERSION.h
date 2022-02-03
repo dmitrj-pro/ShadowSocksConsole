@@ -1,4 +1,5 @@
 #pragma once
-#define SS_VERSION "65"
-#define SS_VERSION_HASHE "IAS2-298-g142ee97"
-#define SS_HEAD_VERSION "1.4.7.1"
+#define SS_VERSION "134"
+#define SS_VERSION_HASHE "IAS2-463-gf3cc3a7"
+#define SS_HEAD_VERSION "1.7.2.2"
+#define SS_FULL_VERSION "1.7.2.2 (134)"

@@ -5,13 +5,14 @@
 #include "ShadowSocksController.h"
 #include <Converter/Converter.h>
 #include <_Driver/Path.h>
-#include "TCPClient.h"
-#include "libSimpleDNS/dns.h"
+#include <Network/TCPClient.h>
+#include <Network/Utils.h>
 #include <iomanip>
 #include <_Driver/ServiceMain.h>
 #include "VERSION.h"
 #include <_Driver/Files.h>
 #include "WGetDownloader/Downloader.h"
+#include <Network/Utils.h>
 
 namespace __DP_LIB_NAMESPACE__ {
 	bool startWithN(const String & str, const String & in);
@@ -25,6 +26,7 @@ using __DP_LIB_NAMESPACE__::Map;
 using __DP_LIB_NAMESPACE__::String;
 using __DP_LIB_NAMESPACE__::Vector;
 using __DP_LIB_NAMESPACE__::parse;
+using __DP_LIB_NAMESPACE__::trim;
 using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::Path;
 
@@ -73,10 +75,12 @@ class ParamsReaderTemplate {
 
 };
 
+unsigned long fileSize(const String & file);
+
 #define HELP_COND cmd == "-h" || cmd == "--help" || cmd == "--h" || cmd == "-help" || cmd == "help"
 
 template <typename OutStream, typename InStream>
-class ConsoleLooper{
+class ConsoleLooper : public ShadowSocksControllerUpdateStatus{
 	private:
 		class StructLogout : public __DP_LIB_NAMESPACE__::BaseException {
 			public:
@@ -99,6 +103,7 @@ class ConsoleLooper{
 
 		void ListTun(ParamsReader & arg);
 		void ListTasks(ParamsReader & arg);
+		void ListRun(ParamsReader & arg);
 		void ListServers(ParamsReader & arg);
 		void ListVPNMode(ParamsReader & arg);
 		void ListVariables(ParamsReader & arg);
@@ -107,6 +112,7 @@ class ConsoleLooper{
 
 		void EditServer(ParamsReader & arg);
 		void EditTask(ParamsReader & arg);
+		void EditRun(ParamsReader & arg);
 		void EditSettings(ParamsReader & arg);
 		void EditVPN(ParamsReader & arg);
 		void Edit(ParamsReader & arg);
@@ -152,6 +158,13 @@ class ConsoleLooper{
 		void SaveConfig(ParamsReader & arg);
 		void Save(ParamsReader & arg);
 
+		void ShowSettings(ParamsReader & arg);
+		void ShowServer(ParamsReader & arg);
+		void ShowVPN(ParamsReader & arg);
+		void ShowTask(ParamsReader & arg);
+		void ShowRun(ParamsReader & arg);
+		void Show(ParamsReader & arg);
+
 		inline void MakeExit(ParamsReader & arg) { is_exit = true; }
 
 		void Help(ParamsReader & arg);
@@ -164,6 +177,22 @@ class ConsoleLooper{
 		void ManualCMD(const String & cmd);
 		inline void MakeExit() { is_exit = true; ctrl.MakeExit(); }
 		bool SetPassword(const String & password);
+
+		virtual void UpdateServerStatus(const String & server, const String & msg) override {
+			_Server * srv = ShadowSocksController::Get().getConfig().findServerByName(server);
+			if (srv == nullptr)
+				return;
+			cout << "New status server " << srv->name << " " << ( srv->check_result.isRun ?
+																	  ( "ip " + srv->check_result.ipAddr +
+																			(srv->check_result.speed_s.size() > 0 ?
+																				 ( " speed "  + srv->check_result.speed_s )
+																			   :
+																				 ""))
+																	: msg) << "\n";
+		}
+		virtual void UpdateTaskStatus(const String & server, const String & msg) override {
+			cout << "New status task " << server << " " << msg << "\n";
+		}
 
 };
 
@@ -227,6 +256,7 @@ void ConsoleLooper<OutStream, InStream>::Load() {
 	funcs["s"] = &ConsoleLooper::S;
 	funcs["version"] = &ConsoleLooper::VERSION;
 	funcs["disconnect"] = &ConsoleLooper::ServerDisconnect;
+	funcs["show"] = &ConsoleLooper::Show;
 }
 
 template <typename OutStream, typename InStream>
@@ -253,10 +283,40 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 		cout << "\tParametr - server:\n";
 		cout << "\t\tname:String\n\t\thost:String\n\t\tport:Int (May be string if use variable)\n\t\ttls:Bool\n\t\tmode:String\n\t\tv2host:String\n\t\tv2path:String\n\n";
 		cout << "\tParametr - task\n";
-		cout << "\t\tname:String\n\t\tpassword:String\n\t\tmethod:String(aes128, aes256, chacha20_poly1305)\n\t\tservers:Array<String>\n\t\tvpn:String(default=none)\n\t\thttp_port:int\n\t\tsys_proxy:Bool\n\t\tsocks_port:int\n\t\tlocahost:String\n\n";
+			cout << "\t\tname:String\n"
+				 << "\t\tenable_ipv6:Bool\n"
+				 << "\t\tpassword:String\n"
+				 << "\t\tmethod:String(aes128, aes256, chacha20_poly1305)\n"
+				 << "\t\tservers:Array<String>\n"
+				 << "\t\trun:String(default=DEFAULT)\n"
+				 << "\n";
+		cout << "\tParametr - run";
+			cout << "\t\tvpn:String(default=none)\n"
+				 << "\t\thttp_port:int\n"
+				 << "\t\tsys_proxy:Bool\n"
+				 << "\t\tsocks_port:int\n"
+				 << "\t\tlocahost:String\n\n";
 		cout << "\tParametr - settings\n";
-		cout << "\t\tport:UInt\n\t\tss_path:String\n\t\tv2ray_path:String\n\t\tautostart:Bool\n\t\ttun2socks_path:String\n\t\tdns2socks_path:String\n\t\tsysproxy_path:String\n\t\tpolipo_path:String\n\t\ttmp_path:String\n\t\tbootstrap_dns:String\n\t\tudp_timeout:UInt\n\t\tignore_check:Bool\n\t\thide_dns2socks:Bool\n\t\tenable_logging:Bool\n";
-
+			cout << "\t\tport:UInt\n"
+				 << "\t\thport:UInt\n"
+				 << "\t\tlisten_host:String\n"
+				 << "\t\tautostart:Bool\n"
+				 << "\t\tss_path:String\n"
+				 << "\t\tv2ray_path:String\n"
+				 << "\t\ttun2socks_path:String\n"
+				 << "\t\tdns2socks_path:String\n"
+				 << "\t\twget_path:String\n"
+				 << "\t\ttmp_path:String\n"
+				 << "\t\tenable_logging:Bool\n"
+				 << "\t\thide_dns2socks:Bool\n"
+				 << "\t\tudp_timeout:UInt\n"
+				 << "\t\tignore_check:Bool\n"
+				 << "\t\tbootstrap_dns:String\n"
+				 << "\t\tauto_check_servers: Off, Ip, Speed\n"
+				 << "\t\tauto_check_interval_s: UInt\n"
+				 << "\t\tauto_check_server_ip_url:String\n"
+				 << "\t\tauto_check_download_url:String\n"
+				 ;
 		return;
 	}
 	LiteralReader * _reader = nullptr;
@@ -346,6 +406,37 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 				}
 				ctrl.getConfig().tun2socksConf.push_back(conf);
 			}
+			if (type == "run") {
+				_RunParams conf = ctrl.getConfig().findRunParamsbyName(name);
+
+				if (parametr == "vpn") {
+					if (value != "none")
+						conf.tun2SocksName = value;
+					else
+						conf.tun2SocksName = "";
+					cout << "tun2SocksName = " << conf.tun2SocksName << "\n";
+				}
+				if (conf.tun2SocksName.size() == 0) {
+					MiCro_t("http_port", httpProxy, int);
+					if (conf.httpProxy > 0) {
+						MiCro_t("sys_proxy", systemProxy, bool);
+					} else
+						conf.systemProxy = false;
+				} else {
+					conf.httpProxy = -1;
+					conf.systemProxy = false;
+				}
+				MiCro_t("socks_port", localPort, int);
+				MiCro_s("localhost", localHost);
+				MiCro_t("multimode", multimode, bool);
+
+				_RunParams conf2 = ctrl.getConfig().findRunParamsbyName(name);
+				ctrl.getConfig().deleteRunParamsByName(conf.name);
+				if (!ctrl.getConfig().IsCorrect(conf)) {
+					ctrl.getConfig().runParams.push_back(conf2);
+				} else
+					ctrl.getConfig().runParams.push_back(conf);
+			}
 			if (type == "task") {
 				_Task * _sr = ctrl.getConfig().findTaskByName(name);
 				if (_sr == nullptr) {
@@ -390,25 +481,14 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 					}
 					cout << "\n";
 				}
-				if (parametr == "vpn") {
+				if (parametr == "run") {
 					if (value != "none")
-						cf->tun2SocksName = value;
+						cf->runParamsName = value;
 					else
-						cf->tun2SocksName = "";
-					cout << "tun2SocksName = " << cf->tun2SocksName << "\n";
+						cf->runParamsName = "DEFAULT";
+					cout << "runParams = " << cf->runParamsName << "\n";
 				}
-				if (cf->tun2SocksName.size() == 0) {
-					MiCro2_t("http_port", httpProxy, int);
-					if (cf->httpProxy > 0) {
-						MiCro2_t("sys_proxy", systemProxy, bool);
-					} else
-						cf->systemProxy = false;
-				} else {
-					cf->httpProxy = -1;
-					cf->systemProxy = false;
-				}
-				MiCro2_t("socks_port", localPort, int);
-				MiCro2_s("localhost", localHost);
+				MiCro2_t("enable_ipv6", enable_ipv6, bool);
 				ctrl.getConfig().deleteTaskById(cf->id);
 				if (!ctrl.getConfig().CheckTask(cf)) {
 					ctrl.getConfig().tasks.push_back(_sr);
@@ -466,24 +546,38 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 
 				}
 				SaveSRV2();
+				#undef SaveSRV2
 			}
 			if (type == "settings") {
 				cout << "Edit settings ";
 				auto & conf = ctrl.getConfig();
-				MiCro_t("port", defaultPort, UInt);
+
+				MiCro_t("autostart", autostart, bool);
 				MiCro_s("ss_path", shadowSocksPath);
 				MiCro_s("v2ray_path", v2rayPluginPath);
-				MiCro_t("autostart", autostart, bool);
 				MiCro_s("tun2socks_path", tun2socksPath);
 				MiCro_s("dns2socks_path", dns2socksPath);
-				MiCro_s("sysproxy_path", sysproxyPath);
-				MiCro_s("polipo_path", polipoPath);
+
+				MiCro_s("wget_path", wgetPath);
+
 				MiCro_s("tmp_path", tempPath);
-				MiCro_s("bootstrap_dns", bootstrapDNS);
+				MiCro_t("enable_logging", enableLogging, bool);
+				MiCro_t("hide_dns2socks", hideDNS2Socks, bool);
 				MiCro_t("udp_timeout", udpTimeout, UInt);
 				MiCro_t("ignore_check", IGNORECHECKSERVER, bool);
-				MiCro_t("hide_dns2socks", hideDNS2Socks, bool);
-				MiCro_t("enable_logging", enableLogging, bool);
+				MiCro_s("bootstrap_dns", bootstrapDNS);
+
+				if (parametr == "auto_check_servers") {
+					conf.auto_check_mode = ShadowSocksSettings::str_to_auto(value);
+					cout << "auto_check_mode" << " = " << ShadowSocksSettings::auto_to_str(conf.auto_check_mode) <<"\n";
+				}
+				MiCro_t("auto_check_interval_s", auto_check_interval_s, unsigned int);
+				MiCro_s("auto_check_server_ip_url", auto_check_ip_url);
+				MiCro_s("auto_check_download_url", auto_check_download_url);
+
+
+
+
 			}
 			break;
 		}
@@ -572,6 +666,62 @@ void ConsoleLooper<OutStream, InStream>::EditServer(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::EditRun(ParamsReader & arg) {
+	String cmd = arg.read("Name");
+	if (HELP_COND) {
+		cout << "edit task ${Name} ${NewName} ${Password} ${Method} ${Servers:array<int>}\n";
+		return;
+	}
+	_RunParams params = ctrl.getConfig().findRunParamsbyName(cmd);
+	if (params.isNull) {
+		cout << "Run params is not found";
+		return;
+	}
+
+	String tx = arg.read("VPN Mode Name");
+	if (tx.size() > 0 ) {
+		if (tx != "none")
+			params.tun2SocksName = tx;
+		else
+			params.tun2SocksName = "";
+	}
+	if (params.tun2SocksName.size() == 0) {
+		tx = arg.read("Http Proxy Port", toString(params.httpProxy));
+		if (tx.size() > 0) params.httpProxy = parse<int>(tx);
+		if (params.httpProxy > 0) {
+			tx = arg.read("System proxy? (0/1)", toString(params.systemProxy));
+			if (tx.size() > 0) params.systemProxy = parse<bool>(tx);
+		} else {
+			params.systemProxy = false;
+		}
+	} else {
+		params.httpProxy = -1;
+		params.systemProxy = false;
+	}
+	tx = arg.read("Enable multi connections? (0/1)", toString(params.multimode));
+	if (tx.size() > 0) params.multimode = parse<bool>(tx);
+
+	tx = arg.read("Socks Port (-1 - use default)", toString(params.localPort));
+	if (tx.size() > 1) params.localPort = parse<int>(tx);
+	tx = arg.read("Socks local host (none or '' - use default)", params.localHost);
+	if (tx.size() > 1) {
+		if (tx == "none")
+			params.localHost = "";
+		else
+			params.localHost = tx;
+	}
+
+	_RunParams conf2 = ctrl.getConfig().findRunParamsbyName(params.name);
+	ctrl.getConfig().deleteRunParamsByName(params.name);
+	if (!ctrl.getConfig().IsCorrect(params)) {
+		ctrl.getConfig().runParams.push_back(conf2);
+	} else
+		ctrl.getConfig().runParams.push_back(params);
+
+	ctrl.SaveConfig();
+}
+
+template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::EditTask(ParamsReader & arg) {
 	String cmd = arg.read("Name");
 	if (HELP_COND) {
@@ -614,35 +764,15 @@ void ConsoleLooper<OutStream, InStream>::EditTask(ParamsReader & arg) {
 		} else
 			break;
 	}
-	tx = arg.read("VPN Mode Name");
+	tx = arg.read("Run Parametr Name");
 	if (tx.size() > 0 ) {
 		if (tx != "none")
-			tk->tun2SocksName = tx;
+			tk->runParamsName = tx;
 		else
-			tk->tun2SocksName = "";
+			tk->runParamsName = "DEFAULT";
 	}
-	if (tk->tun2SocksName.size() == 0) {
-		tx = arg.read("Http Proxy Port", toString(tk->httpProxy));
-		if (tx.size() > 0) tk->httpProxy = parse<int>(tx);
-		if (tk->httpProxy > 0) {
-			tx = arg.read("System proxy? (0/1)", toString(tk->systemProxy));
-			if (tx.size() > 0) tk->systemProxy = parse<int>(tx);
-		} else {
-			tk->systemProxy = false;
-		}
-	} else {
-		tk->httpProxy = -1;
-		tk->systemProxy = false;
-	}
-	tx = arg.read("Socks Port (-1 - use default)", toString(tk->localPort));
-	if (tx.size() > 1) tk->localPort = parse<int>(tx);
-	tx = arg.read("Socks local host (none or '' - use default)", tk->localHost);
-	if (tx.size() > 1) {
-		if (tx == "none")
-			tk->localHost = "";
-		else
-			tk->localHost = tx;
-	}
+	tx = arg.read("Enable IPv6 (for mobile)? (0/1)", toString(tk->enable_ipv6));
+	if (tx.size() > 0) tk->enable_ipv6 = parse<bool>(tx);
 
 	ctrl.getConfig().deleteTaskById(tk->id);
 	if (!ctrl.getConfig().CheckTask(tk)) {
@@ -662,17 +792,42 @@ void ConsoleLooper<OutStream, InStream>::GetSource(ParamsReader &) {
 }
 
 template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader & arg) {
+	auto & conf = ctrl.getConfig();
+	#define SHOWSETTINGS(NAME, VAL) cout << std::setw(20) << NAME << std::setw(20) << VAL << "\n"
+	SHOWSETTINGS("Name", "Value");
+	cout << "----------------------------\n";
+	SHOWSETTINGS("Enable autostart", conf.autostart);
+	SHOWSETTINGS("ShadowSocks Path", conf.shadowSocksPath);
+	SHOWSETTINGS("V2Ray Path", conf.v2rayPluginPath);
+	SHOWSETTINGS("Tun2Socks path", conf.tun2socksPath);
+	SHOWSETTINGS("Dns2Socks path", conf.dns2socksPath);
+	SHOWSETTINGS("WGet path", conf.wgetPath);
+	SHOWSETTINGS("TempPath", conf.tempPath);
+	SHOWSETTINGS("Enable logging file", conf.enableLogging);
+	SHOWSETTINGS("Hide DNS2Socks", conf.hideDNS2Socks);
+	SHOWSETTINGS("Use system wget (Linux)", conf.fixLinuxWgetPath);
+	SHOWSETTINGS("Deep check servers before start task", conf.enableDeepCheckServer);
+	SHOWSETTINGS("Auto detect Tap interface", conf.autoDetectTunInterface);
+	SHOWSETTINGS("Udp Timeout (s)", conf.udpTimeout);
+	SHOWSETTINGS("Ignore check result", conf.IGNORECHECKSERVER);
+	SHOWSETTINGS("Bootstrap DNS", conf.bootstrapDNS);
+	SHOWSETTINGS("Auto check servers", ShadowSocksSettings::auto_to_str(conf.auto_check_mode));
+	SHOWSETTINGS("Auto check server interval (s)", conf.auto_check_interval_s);
+	SHOWSETTINGS("Auto check server ip url", conf.auto_check_ip_url);
+	SHOWSETTINGS("Auto check server download url", conf.auto_check_download_url);
+
+	#undef SHOWSETTINGS
+}
+
+template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	auto & conf = ctrl.getConfig();
-	String cmd = arg.read("Default Host", conf.defaultHost);
+	String cmd = arg.read("ShadowSocks Path", conf.shadowSocksPath);
 	if (HELP_COND) {
 		cout << "edit settings";//
 		return;
 	}
-	if (cmd.size() > 1) conf.defaultHost = cmd;
-	cmd = arg.read("Default Port", toString(conf.defaultPort));
-	if (cmd.size() > 1) conf.defaultPort = parse<UInt>(cmd);
-	cmd = arg.read("ShadowSocks Path", conf.shadowSocksPath);
 	if (cmd.size() > 1 ) conf.shadowSocksPath = cmd;
 	cmd = arg.read("V2Ray Path", conf.v2rayPluginPath);
 	if (cmd.size() > 1) conf.v2rayPluginPath = cmd;
@@ -682,12 +837,6 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	if (cmd.size() > 0) conf.tun2socksPath = cmd;
 	cmd = arg.read("Dns2Socks", toString(conf.dns2socksPath));
 	if (cmd.size() > 0) conf.dns2socksPath = cmd;
-	cmd = arg.read("HttpProxyPort", toString(conf.defaultHttpPort));
-	if (cmd.size() > 0) conf.defaultHttpPort = parse<int>(cmd);
-	cmd = arg.read("SysProxyPath", conf.sysproxyPath);
-	if (cmd.size() > 1) conf.sysproxyPath = cmd;
-	cmd = arg.read("PolipoPath", conf.polipoPath);
-	if (cmd.size() > 1) conf.polipoPath = cmd;
 
 	cmd = arg.read("WGetPath", conf.wgetPath);
 	if (cmd.size() > 1) conf.wgetPath = cmd;
@@ -701,14 +850,45 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	cmd = arg.read("Udp Timeout (s)", toString(conf.udpTimeout));
 	if (cmd.size() > 0) conf.udpTimeout = parse<UInt>(cmd);
 
-	cmd = arg.read("Ignore check result (s)", toString(conf.IGNORECHECKSERVER));
+	cmd = arg.read("Ignore check result", toString(conf.IGNORECHECKSERVER));
 	if (cmd.size() > 0) conf.IGNORECHECKSERVER = parse<bool>(cmd);
+
+	cmd = arg.read("Use system wget (Linux)", toString(conf.fixLinuxWgetPath));
+	if (cmd.size() > 0) conf.fixLinuxWgetPath = parse<bool>(cmd);
+
+	cmd = arg.read("Deep check servers before start task", toString(conf.enableDeepCheckServer));
+	if (cmd.size() > 0) conf.enableDeepCheckServer = parse<bool>(cmd);
+
+	cmd = arg.read("Auto detect Tap interface", toString(conf.autoDetectTunInterface));
+	if (cmd.size() > 0) conf.autoDetectTunInterface = parse<bool>(cmd);
 
 	cmd = arg.read("Hide DNS2Socks", toString(conf.hideDNS2Socks));
 	if (cmd.size() > 0) conf.hideDNS2Socks = parse<bool>(cmd);
 
+	cmd = arg.read("Auto check servers (Off, Ip, Speed)", ShadowSocksSettings::auto_to_str(conf.auto_check_mode));
+	if (cmd.size() > 0) conf.auto_check_mode = ShadowSocksSettings::str_to_auto(cmd);
+
+	cmd = arg.read("Auto check server interval (s)", toString(conf.auto_check_interval_s));
+	if (cmd.size() > 0) conf.auto_check_interval_s = parse<unsigned int>(cmd);
+
+	cmd = arg.read("Auto check server ip url", conf.auto_check_ip_url);
+	if (cmd.size() > 1) conf.auto_check_ip_url = cmd;
+
+	cmd = arg.read("Auto check server download url", conf.auto_check_download_url);
+	if (cmd.size() > 1) conf.auto_check_download_url = cmd;
+
 	cmd = arg.read("Enable logging file", toString(conf.enableLogging));
-	if (cmd.size() > 0) conf.enableLogging = parse<bool>(cmd);
+	if (cmd.size() > 0) {
+		conf.enableLogging = parse<bool>(cmd);
+		if (conf.enableLogging) {
+			__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+			logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+			logF.Append("LOGGING.txt");
+			__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
+			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
+			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+		}
+	}
 
 	ctrl.SaveConfig();
 }
@@ -717,7 +897,7 @@ template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::Edit(ParamsReader & arg) {
 	String cmd = arg.read("type");
 	if (HELP_COND) {
-		cout << "Supported type:\n\ttask\n\tserver\n\tsettings\n\tvpn";
+		cout << "Supported type:\n\ttask\n\tserver\n\tsettings\n\tvpn\n\trun";
 		return;
 	}
 	if (cmd == "task") {
@@ -736,6 +916,10 @@ void ConsoleLooper<OutStream, InStream>::Edit(ParamsReader & arg) {
 		EditVPN(arg);
 		return;
 	}
+	if (cmd == "run") {
+		EditRun(arg);
+		return;
+	}
 	cout << "Unknow command '" << cmd << "'\nUse edit --help\n";
 }
 
@@ -747,7 +931,11 @@ void ConsoleLooper<OutStream, InStream>::Connect(ParamsReader & arg) {
 		return;
 	}
 
-	if (TCPClient::IsCanConnect(cmd, parse<unsigned int>(arg.read("port")), ctrl.getConfig().bootstrapDNS))
+	if (ctrl.getConfig().bootstrapDNS.size() > 4) {
+		__DP_LIB_NAMESPACE__::setGlobalDNS(ctrl.getConfig().bootstrapDNS);
+	}
+
+	if (__DP_LIB_NAMESPACE__::TCPClient::IsCanConnect(cmd, parse<unsigned int>(arg.read("port"))))
 		cout << "Connect success\n";
 	else
 		cout << "Connect fail\n";
@@ -761,7 +949,9 @@ void ConsoleLooper<OutStream, InStream>::Resolve(ParamsReader &arg) {
 		cout << "resolve ${host}";
 		return;
 	}
-	auto list = resolveDNS(cmd, this->ctrl.getConfig().bootstrapDNS);
+	if (this->ctrl.getConfig().bootstrapDNS.size() > 4)
+		__DP_LIB_NAMESPACE__::setGlobalDNS(this->ctrl.getConfig().bootstrapDNS);
+	auto list = __DP_LIB_NAMESPACE__::resolveDomainList(cmd);
 	for (const String & ip : list)
 		cout << ip << "\n";
 }
@@ -977,203 +1167,74 @@ void ConsoleLooper<OutStream, InStream>::VPNUpdate(ParamsReader & arg) {
 
 }
 
+void calcSizeAndText(double origin, double & res, String & res_s);
+
 template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::CheckSpeedTest(ParamsReader & arg, bool enable_speed) {
 	const auto & tasks = ctrl.getConfig().tasks;
-	struct ResultCheck{
-		String ipAddr;
+	_ShadowSocksController::CheckLoopStruct args = ctrl.makeCheckStruct();
+	args._server_name = "";
+	args._task_name = "";
+	args.auto_check_interval_s = 0;
+	args.auto_check_mode = enable_speed ? ShadowSocksSettings::AutoCheckingMode::Speed : ShadowSocksSettings::AutoCheckingMode::Ip;
 
-		double speed_100;
-		double speed_500;
-
-		bool isRun = false;
-		bool checked = false;
-		String msg = "";
-		UInt socks_port;
-		UInt http_port;
-	};
-
-	bool isFast = false;
 
 	while (!arg.isEmpty()) {
-		String flag = arg.read("");
-		if (flag == "FAST") {
-			isFast = true;
+		String cmd = arg.read("");
+		if (cmd == "MYIP") {
+			cout << "Set check ip link to api.my-ip.io\n";
+			args.checkIpUrl = "https://api4.my-ip.io/ip";
+		}
+		if (startWithN(cmd, "LINK=")) {
+			args.downloadUrl = cmd.substr(String("LINK=").size());
+			cout << "Set speed test link: " << args.downloadUrl << "\n";
+		}
+		if (startWithN(cmd, "CHECKIP=")) {
+			args.checkIpUrl = cmd.substr(String("CHECKIP=").size());
+			cout << "Set check ip link: " << args.checkIpUrl << "\n";
+		}
+
+		if (HELP_COND) {
+			cout << "check speed ${FAST=FAST} LINK=${link:url}\n";
+			cout << "LINK - set test speed link. If it use enable FAST\n";
+			cout << "CHECKIP - set link to check ip. Default ipconfig.cc\n";
+			cout << "MYIP - set link to check ip api4.my-ip.io\n\n";
+
+			cout << "Check speed with https://speed.hetzner.de/100MB.bin and http://ipv4.download.thinkbroadband.com/512MB.zip\n";
+			return;
 		}
 	}
 
-	Map<String, ResultCheck * > data;
-	cout << "Start run all servers\n";
-
-	__DP_LIB_NAMESPACE__::List<UInt> socks5_ports;
-	__DP_LIB_NAMESPACE__::List<UInt> http_ports;
-	{
-		UInt socks5_port = 12000;
-		UInt http_port = 16000;
-
-		for (const _Task * task : tasks)
-			for (int id : task->servers_id) {
-				while (!ShadowSocksClient::portIsAllow(ctrl.getConfig().defaultHost, socks5_port))
-					socks5_port += 1;
-				socks5_ports.push_back(socks5_port);
-				socks5_port++;
-
-				while (!ShadowSocksClient::portIsAllow(ctrl.getConfig().defaultHost, http_port))
-					http_port += 1;
-				http_ports.push_back(http_port);
-				http_port++;
-			}
-	}
-	// Ждем пока освободятся порты.
-	std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-
-
-	for (const _Task * task : tasks) {
-		for (int id : task->servers_id) {
-			_Server * server = ctrl.getConfig().findServerById(id);
-			ResultCheck * res = new ResultCheck();
-			SSClientFlags flags;
-
-			UInt socks5_port = *socks5_ports.begin();
-			UInt http_port = *http_ports.begin();
-			socks5_ports.pop_front();
-			http_ports.pop_front();
-
-			flags.port = socks5_port;
-			flags.http_port = http_port;
-			res->socks_port = flags.port;
-			res->http_port = flags.http_port;
-			flags.runVPN = false;
-			flags.vpnName = "";
-			flags.server_name = server->name;
-			auto onCrash = [this, res]() {
-				res->checked = true;
-				res->isRun = false;
-				res->msg = "Fail to run";
-			};
-
-			data[server->name] = res;
-
-			try{
-				ctrl.StartByName(task->name, [res]() {
-					res->isRun = true;
-				}, onCrash, flags);
-			} catch (__DP_LIB_NAMESPACE__::LineException e) {
-				res->isRun = false;
-				res->checked = true;
-				res->msg = e.toString();
-			}
-		}
-	}
-	cout << "All servers started. Wait for start success\n";
-	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-	{
-		for (auto& it : data) {
-			if (!it.second->isRun)
-				continue;
-			ProxyElement proxy;
-			proxy.host = ctrl.getConfig().defaultHost;
-			proxy.port = it.second->http_port;
-			proxy.type = ProxyElement::Type::Http;
-			Downloader dwn(proxy);
-			dwn.SetWget(ctrl.getConfig().getWGetPath());
-			dwn.SetIgnoreCheckCert(true);
-			String url = "http://ipconfig.cc";
-			try{
-				it.second->ipAddr = dwn.Download(url);
-			} catch (__DP_LIB_NAMESPACE__::LineException e) {
-				it.second->isRun = false;
-				it.second->checked = true;
-				it.second->msg = e.toString();
-				continue;
-			}
-
-			it.second->checked = true;
-			it.second->isRun = it.second->ipAddr.size() > 3;
-
-			if (enable_speed && it.second->isRun) {
-				Path p (ctrl.getConfig().tempPath);
-				p.Append("speed.zip");
-				auto t1 = std::chrono::high_resolution_clock::now();
-				try{
-					dwn.Download("http://speedtest.wdc01.softlayer.com/downloads/test100.zip", p.Get());
-				} catch (__DP_LIB_NAMESPACE__::LineException e) {
-					it.second->isRun = false;
-					it.second->checked = true;
-					it.second->msg = e.toString();
-					continue;
-				}
-				auto t2 = std::chrono::high_resolution_clock::now();
-				__DP_LIB_NAMESPACE__::RemoveFile(p.Get());
-
-				auto time_s = std::chrono::duration_cast<std::chrono::seconds> (t2 - t1).count();
-				auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds> (t2 - t1).count();
-				if (time_s == 0) {
-					if (time_ms == 0)
-						it.second->speed_100 = 0;
-					else
-						it.second->speed_100 = (100.0 * 1000) / time_ms;
-				} else
-					it.second->speed_100 = (100.0) / time_s;
-
-			}
-		}
-	}
-
-	{
-		for (auto& it : data) {
-			if (!it.second->isRun)
-				continue;
-			ProxyElement proxy;
-			proxy.host = ctrl.getConfig().defaultHost;
-			proxy.port = it.second->http_port;
-			proxy.type = ProxyElement::Type::Http;
-			Downloader dwn(proxy);
-			dwn.SetWget(ctrl.getConfig().getWGetPath());
-			dwn.SetIgnoreCheckCert(true);
-
-			if (enable_speed && !isFast) {
-				Path p (ctrl.getConfig().tempPath);
-				p.Append("speed.zip");
-				auto t1 = std::chrono::high_resolution_clock::now();
-				try{
-					dwn.Download("http://speedtest.wdc01.softlayer.com/downloads/test500.zip", p.Get());
-				} catch (__DP_LIB_NAMESPACE__::LineException e) {
-					it.second->isRun = false;
-					it.second->checked = true;
-					it.second->msg = e.toString();
-					continue;
-				}
-				auto t2 = std::chrono::high_resolution_clock::now();
-				__DP_LIB_NAMESPACE__::RemoveFile(p.Get());
-
-				auto time_s = std::chrono::duration_cast<std::chrono::seconds> (t2 - t1).count();
-				auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds> (t2 - t1).count();
-				if (time_s == 0) {
-					if (time_ms == 0)
-						it.second->speed_500 = 0;
-					else
-						it.second->speed_500 = (500.0 * 1000) / time_ms;
-				} else
-					it.second->speed_500 = (500.0) / time_s;
-			}
-		}
-	}
-
+	ctrl.check_loop(args);
 
 	{
 		if (enable_speed)
-			cout << "Server\tStatus\tip\tSpeed 100\tSpeed 500\tmsg\n";
+			cout
+					<< std::setw (10) << "Server"
+					<< std::setw(8) << "Status"
+					<< std::setw(20) << "IP"
+					<< std::setw(15) << "Speed 100"
+					<< "    msg\n";
 		else
-			cout << "Server\tStatus\tip\tmsg\n";
-		for (auto& it : data) {
-			ctrl.StopByName(it.first);
+			cout
+					<< std::setw (10) << "Server"
+					<< std::setw(8) << "Status"
+					<< std::setw(20) << "IP"
+					<< "    msg\n";
+		for (_Server* it : ctrl.getConfig().servers) {
 			if (enable_speed)
-				cout << it.first << "\t" << (it.second->isRun ? "OK" : "FAIL") << "\t" << it.second->ipAddr << "\t" << it.second->speed_100 << "\t" << it.second->speed_500 << "\t" << it.second->msg << "\n";
+				cout
+						<< std::setw (10) << it->name
+						<< std::setw(8) << (it->check_result.isRun ? "OK" : "FAIL")
+						<< std::setw(20) << it->check_result.ipAddr
+						<< std::setw(15) << (toString(it->check_result.speed) + " " + it->check_result.speed_s)
+						<< "    " << it->check_result.msg << "\n";
 			else
-				cout << it.first << "\t" << (it.second->isRun ? "OK" : "FAIL") << "\t" << it.second->ipAddr << "\t" << it.second->msg << "\n";
-			delete it.second;
+				cout
+						<< std::setw (10) << it->name
+						<< std::setw(8) << (it->check_result.isRun ? "OK" : "FAIL")
+						<< std::setw(20) << it->check_result.ipAddr
+						<< "    " << it->check_result.msg << "\n";
 		}
 	}
 }
@@ -1183,7 +1244,7 @@ void ConsoleLooper<OutStream, InStream>::StartTask(ParamsReader & arg){
 	String cmd = arg.read("Task");
 	if (HELP_COND) {
 		cout << "Start task\n";
-		cout << "Use: start ${TaskName} ${check:null<string(NOCHECK)>} ${check:null<string(NOVPN)>} ${check:null<string(SPORT=${port})>} ${check:null<string(SERVER=${servername})>}\n";
+		cout << "Use: start ${TaskName} ${check:null<string(NOCHECK)>} ${novpn:null<string(NOVPN)>} ${socks_port:null<string(SPORT=${port})>} ${server:null<string(SERVER=${servername})>} ${http_port:null<string(HPORT=${http port})>} ${enable_sysproxy:null<string(SYSPROXY)>}\n";
 		return;
 	}
 	_Task * t = ctrl.getConfig().findTaskByName(cmd);
@@ -1217,15 +1278,22 @@ void ConsoleLooper<OutStream, InStream>::StartTask(ParamsReader & arg){
 			String port = flag.substr(String("SERVER=").size());
 			flags.server_name = port;
 		}
+		if (__DP_LIB_NAMESPACE__::startWith(flag, "HPORT=")) {
+			String port = flag.substr(String("HPORT=").size());
+			flags.http_port = parse<unsigned short>(port);
+		}
+		if (__DP_LIB_NAMESPACE__::startWith(flag, "SYSPROXY")) {
+			flags.sysproxy_s = SSClientFlagsBoolStatus::True;
+		}
 
 	}
-	auto funcCrash = [this, t, cmd] () {
-		cout << "Fail to start task " << t->name << "\nCheck it\n";
+	auto funcCrash = [this, cmd] (const String & name, const ExitStatus & status) {
+		cout << "Fail to start task " << name << ": " << status.str << "\n";
 		ctrl.StopByName(cmd);
 	};
 
-	ctrl.StartByName(cmd, [this, t] () {
-		cout << "Task " << t->name << " succesfully started\n";
+	ctrl.StartByName(cmd, [this] ( const String & name) {
+		cout << "Task " << name << " succesfully started\n";
 	}, funcCrash, flags);
 	if (nocheck) {
 		auto & cnf = ctrl.getConfig();
@@ -1314,70 +1382,85 @@ void ConsoleLooper<OutStream, InStream>::ManualCMD(const String & _cmd) {
 
 		}
 	}
-	__DP_LIB_NAMESPACE__::log << "Command '" << c << "'\n";
+	DP_LOG_DEBUG << "Command '" << c << "'\n";
 	if (__DP_LIB_NAMESPACE__::ConteinsKey(funcs, c)) {
 		auto func = funcs[c];
 		(this->*func)(args);
 	} else {
-		__DP_LIB_NAMESPACE__::log << "Unknow comand '" << c << "'\n";
+		DP_LOG_WARNING << "Unknow comand '" << c << "'\n";
 		throw EXCEPTION("Unknow comand '" + c + "'");
 	}
 }
 
 template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::Loop() {
+	unsigned int _prev_servers = ctrl.getConfig().servers.size();
 	if (! ctrl.isCreated() || (ctrl.isCreated() && ctrl.isEncrypted())) {
-		while (true) {
-			if (ctrl.isOpened())
-				break;
+		while (!cin.eof()) {
 			cout << "Write password:";
 			cout.flush();
 			String password;
 			getline(cin, password);
+			if (__DP_LIB_NAMESPACE__::ServiceSinglton::Get().NeedToExit())
+				return;
 			password = __DP_LIB_NAMESPACE__::trim(password);
-			__DP_LIB_NAMESPACE__::log << "Input password: '" << password << "'\n";
+			DP_LOG_TRACE << "Input password: '" << password << "'\n";
 
 			if (SetPassword(password)) {
-				__DP_LIB_NAMESPACE__::log << "Config parsed\n";
+				DP_LOG_INFO << "Config parsed\n";
 				break;
 			}
 		}
 	} else {
 		ctrl.OpenConfig();
-		__DP_LIB_NAMESPACE__::log << "WARNING: Config is not encrypted\n";
+		DP_LOG_WARNING << "Config is not encrypted\n";
 	}
-	if (ctrl.getConfig().enableLogging)
-		__DP_LIB_NAMESPACE__::log.OpenFile("LOGGING.txt");
+	if (cin.eof() || __DP_LIB_NAMESPACE__::ServiceSinglton::Get().NeedToExit())
+		return;
+	if (ctrl.getConfig().enableLogging) {
+		__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+		logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+		logF.Append("LOGGING.txt");
+		__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
+		__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
+		__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+	}
 
 	if (ctrl.CheckInstall()) {
-		auto funcCrash = [this] () {
-			__DP_LIB_NAMESPACE__::log << "Fail to auto start tasks.\n";
-			cout << "Fail to auto start tasks." << "\nCheck its\n";
+		auto funcCrash = [this] (const String & name, const ExitStatus & status) {
+			__DP_LIB_NAMESPACE__::OStrStream error;
+			error << "Fail to auto start task " << name << ": " << status.str;
+			DP_LOG_FATAL << error.str();
+			cout << error.str() << "\n";
 		};
-		ctrl.AutoStart(funcCrash);
+		if (_prev_servers != ctrl.getConfig().servers.size())
+			ctrl.AutoStart(funcCrash);
+		ShadowSocksController::Get().startCheckerThread();
 	} else {
-		__DP_LIB_NAMESPACE__::log << "Fail install. Try exit and enter new password. Or reinstall application\n";
+		DP_LOG_FATAL << "Fail install. Try exit and enter new password. Or reinstall application";
 		cout << "Fail install. Try exit and enter new password. Or reinstall application\n";
 	}
 
 	is_exit = false;
 	cout << "Write help to get help\n";
-	__DP_LIB_NAMESPACE__::log << "Started command loop\n";
+	DP_LOG_DEBUG << "Started command loop";
+	ShadowSocksController::Get().connectNotify(this);
 	while (!is_exit && (!__DP_LIB_NAMESPACE__::ServiceSinglton::Get().NeedToExit()) && (!cin.eof())) {
 		cout << "> ";
 		cout.flush();
 		String cmd;
 		getline(cin, cmd);
-		__DP_LIB_NAMESPACE__::log << "Input command: '" << cmd << "'\n";
+		DP_LOG_DEBUG << "Input command: '" << cmd << "'\n";
 		try {
 			ManualCMD(cmd);
 		} catch (StructLogout e) {
-			__DP_LIB_NAMESPACE__::log << "User Logout\n";
+			DP_LOG_INFO << "User Logout\n";
 			break;
 		} catch (__DP_LIB_NAMESPACE__::LineException e) {
-			cout << e.toString() << "\nUse help\n";
+			cout << e.message() << "\nUse help\n";
 		}
 	}
+	ShadowSocksController::Get().disconnectNotify(this);
 	if (is_exit)
 		MakeExit();
 }
@@ -1511,10 +1594,12 @@ void ConsoleLooper<OutStream, InStream>::Check(ParamsReader &arg) {
 	}
 	if (cmd == "port")
 		CheckPort(arg);
-	if (cmd == "servers")
+	else if (cmd == "servers")
 		CheckSpeedTest(arg, false);
-	if (cmd == "speed")
+	else if (cmd == "speed")
 		CheckSpeedTest(arg, true);
+	else
+		cout << "Unknow command";
 }
 
 
@@ -1702,6 +1787,11 @@ void ConsoleLooper<OutStream, InStream>::ExportConfig(ParamsReader & arg) {
 		cout << "File is exists.";
 		return;
 	}
+	if (!tmp.IsAbsolute()) {
+		Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+		p.Append(tmp.Get());
+		tmp = p;
+	}
 	bool isMobile = arg.readbool("Is Mobile? (0/1)");
 	String v2ray = "v2ray-plugin";
 	String dns = "94.140.14.14"; //"8.8.8.8";
@@ -1717,147 +1807,7 @@ void ConsoleLooper<OutStream, InStream>::ExportConfig(ParamsReader & arg) {
 
 	__DP_LIB_NAMESPACE__::Ofstream out;
 	out.open(tmp.Get());
-	if (!isMobile) {
-		out << "{\n";
-		out << "\t\"version\": \"4.1.10.0\",\n";
-		out << "\t\"configs\":\n";
-	}
-	out << "\t[\n";
-	int num = 0;
-	ShadowSocksSettings & config = ctrl.getConfig();
-	for (_Task * t: ctrl.getConfig().tasks) {
-		num += 1;
-		int srv_num = 0;
-		for (int id : t->servers_id) {
-			srv_num ++;
-			for (_Server * sr : ctrl.getConfig().servers)
-				if (sr->id == id) {
-					__DP_LIB_NAMESPACE__::List<String> ip_addrs;
-					String _host = config.replaceVariables(sr->host);
-					if (isIPv4(_host) || (!is_resolve)) {
-						ip_addrs.push_back(_host);
-					} else {
-						ip_addrs = resolveDNS(_host, config.bootstrapDNS);
-						if (ip_addrs.size() == 0) {
-							cout << "Fail to resolve host" << _host << "\nSkeep it\n";
-							ip_addrs.push_back (_host);
-						}
-					}
-					int i = -1;
-					for (const String & ip : ip_addrs) {
-						i++;
-						out << "\t{\n";
-						out << "\t\t\"server\": \"" << ip << "\",\n";
-						out << "\t\t\"server_port\": " << config.replaceVariables(sr->port) << ",\n";
-						out << "\t\t\"password\": \"" << config.replaceVariables(t->password) << "\",\n";
-						out << "\t\t\"method\": \"";
-
-						String mt = config.replaceVariables(t->method);
-						if (mt == "AEAD_CHACHA20_POLY1305")
-							out << "chacha20-ietf-poly1305";
-						if (mt == "AEAD_AES_256_GCM")
-							out << "aes-256-gcm";
-						if (mt == "AEAD_AES_128_GCM")
-							out << "aes-128-gcm";
-						out << "\",\n";
-						_V2RayServer * srv = dynamic_cast<_V2RayServer *> (sr);
-						out << "\t\t\"plugin\": \"";
-						if (srv != nullptr) {
-							out << v2ray;
-						}
-						out << "\",\n";
-						out << "\t\t\"plugin_opts\": \"";
-						if (srv != nullptr) {
-							if (srv->isTLS)
-								out << "tls;";
-							out << "mode=" << config.replaceVariables(srv->mode) << ";host=" << config.replaceVariables(srv->v2host) << ";path=" << config.replaceVariables(srv->path);
-						}
-						out << "\",\n";
-						if (!isMobile) {
-							out << "\t\t\"plugin_args\": \"\",\n";
-							out << "\t\t\"timeout\": " << 10 << ",\n";
-						}
-						out << "\t\t\"remarks\": \"" << sr->name << (ip_addrs.size() > 1 ? "_" + toString(i) : "") << "\"" << (isMobile ? "," : "") << "\n";
-						if (isMobile) {
-							String _dns = dns;
-							if (t->tun2SocksName.size() > 1) {
-								const Tun2SocksConfig tun = config.findVPNbyName(t->tun2SocksName);
-								if (tun.dns.size() > 0)
-									_dns = *(tun.dns.begin());
-
-							}
-
-							out << "\t\t\"route\": \"all\",\n";
-							out << "\t\t\"remote_dns\": \"" << _dns << "\",\n";
-							out << "\t\t\"ipv6\": false,\n";
-							out << "\t\t\"metered\": false,\n";
-							out << "\t\t\"proxy_apps\": {\n";
-							out << "\t\t\t\"enabled\": false\n";
-							out << "\t\t},\n";
-							out << "\t\t\"udpdns\": false\n";
-						}
-						out << "\t}";
-						if (!((ctrl.getConfig().tasks.size() == num) && (srv_num == t->servers_id.size()) && (i == (ip_addrs.size() - 1)) ) ) {
-							out <<",\n";
-						} else {
-							out << "\n";
-						}
-					}
-
-
-				}
-		}
-	}
-	out << "\t]";
-	if (!isMobile) {
-		out << ",\n";
-		out << "\t\"strategy\": null,\n";
-		out << "\t\"index\": 0,\n";
-		out << "\t\"global\": true,\n";
-		out << "\t\"enabled\": false,\n";
-		out << "\t\"shareOverLan\": false,\n";
-		out << "\t\"isDefault\": false,\n";
-		out << "\t\"isIPv6Enabled\": false,\n";
-		out << "\t\"localPort\": 1080,\n";
-		out << "\t\"portableMode\": true,\n";
-		out << "\t\"showPluginOutput\": false,\n";
-		out << "\t\"pacUrl\": null,\n";
-		out << "\t\"gfwListUrl\": null,\n\t";
-		out << R"("useOnlinePac": false,
-		"secureLocalPac": true,
-		"availabilityStatistics": false,
-		"autoCheckUpdate": true,
-		"checkPreRelease": false,
-		"isVerboseLogging": false,
-		"logViewer": {
-		  "topMost": false,
-		  "wrapText": false,
-		  "toolbarShown": false,
-		  "Font": "Consolas, 8pt",
-		  "BackgroundColor": "Black",
-		  "TextColor": "White"
-		},
-		"proxy": {
-		  "useProxy": false,
-		  "proxyType": 1,
-		  "proxyServer": "localhost",
-		  "proxyPort": 8080,
-		  "proxyTimeout": 3,
-		  "useAuth": false,
-		  "authUser": "",
-		  "authPwd": ""
-		},
-		"hotkey": {
-		  "SwitchSystemProxy": "",
-		  "SwitchSystemProxyMode": "",
-		  "SwitchAllowLan": "",
-		  "ShowLogs": "",
-		  "ServerMoveUp": "",
-		  "ServerMoveDown": "",
-		  "RegHotkeysAtStartup": false
-		}
-	  })";
-	}
+	ctrl.ExportConfig(out, isMobile, is_resolve, v2ray);
 	out.close();
 
 }
@@ -1892,6 +1842,39 @@ void ConsoleLooper<OutStream, InStream>::SaveConfig(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::Show(ParamsReader & arg) {
+	String cmd = arg.read("type");
+	if (HELP_COND) {
+		cout << "Support:\n\tsettings - Show current settings\n";
+		cout << "\ttask\n";
+		cout << "\tserver\n";
+		cout << "\tvpn\n";
+		cout << "\trun\n";
+		return;
+	}
+	if (cmd == "task") {
+		ShowTask(arg);
+		return;
+	}
+	if (cmd == "server") {
+		ShowServer(arg);
+		return;
+	}
+	if (cmd == "vpn") {
+		ShowVPN(arg);
+		return;
+	}
+	if (cmd == "settings") {
+		ShowSettings(arg);
+		return;
+	}
+	if (cmd == "run") {
+		ShowRun(arg);
+		return;
+	}
+}
+
+template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::Save(ParamsReader & arg) {
 	String cmd = arg.read("type");
 	if (HELP_COND) {
@@ -1911,12 +1894,76 @@ void ConsoleLooper<OutStream, InStream>::ListTasks(ParamsReader & arg) {
 		ec("id", sr->id);
 		ec("name", sr->name);
 		ec("method", sr->method);
-		ec("local host", (sr->localHost.size() < 1 ? ctrl.getConfig().defaultHost : sr->localHost));
-		ec("local port", (sr->localPort< 1 ? ctrl.getConfig().defaultPort : sr->localPort));
-		ec("vpn", sr->tun2SocksName)
+		ec("RunParams", sr->runParamsName)
 		cout << "Servers: ";
 		for (int id : sr->servers_id)
 			cout << ctrl.getConfig().findServerById(id)->name << " (" << id << ") , ";
+		cout << "\n------------------------------------------\n";
+	}
+}
+
+template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::ListRun(ParamsReader & arg) {
+	const auto & srvs = ctrl.getConfig().runParams;
+	for (const _RunParams & sr : srvs) {
+		ec("name", sr.name);
+		ec("local host", sr.localHost);
+		ec("Enable multi connections:", sr.multimode);
+		ec("local port", sr.localPort);
+		ec("local http port", sr.httpProxy);
+		ec("enable sys proxy", sr.systemProxy);
+		ec("vpn", sr.tun2SocksName)
+		cout << "\n------------------------------------------\n";
+	}
+}
+
+template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::ShowTask(ParamsReader & arg) {
+	String cmd = arg.read("Name");
+	if (HELP_COND) {
+		cout << "show task ${Name}\n";
+		return;
+	}
+	_Task * sr = ctrl.getConfig().findTaskByName(cmd);
+	if (sr == nullptr) {
+		cout << "Task is not found";
+		return;
+	}
+
+	{
+		ec("id", sr->id);
+		ec("name", sr->name);
+		ec("method", sr->method);
+		ec("password", sr->password);
+		ec("Enable IPv6", (sr->enable_ipv6 ? "True" : "False"));
+		ec("Run Params", sr->runParamsName)
+		cout << "Servers: ";
+		for (int id : sr->servers_id)
+			cout << ctrl.getConfig().findServerById(id)->name << " (" << id << ") , ";
+		cout << "\n------------------------------------------\n";
+	}
+}
+
+template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::ShowRun(ParamsReader & arg) {
+	String cmd = arg.read("Name");
+	if (HELP_COND) {
+		cout << "show run ${Name}\n";
+		return;
+	}
+	_RunParams p = ctrl.getConfig().findRunParamsbyName(cmd);
+	if (p.isNull) {
+		cout << "Run Parametrs is not found";
+		return;
+	}
+
+	{
+		ec("name", p.name);
+		ec("local host", p.localHost);
+		ec("local port", p.localPort);
+		ec("Http Proxy Port", p.httpProxy);
+		ec("System proxy", (p.systemProxy ? "True" : "False"));
+		ec("vpn", p.tun2SocksName)
 		cout << "\n------------------------------------------\n";
 	}
 }
@@ -1968,6 +2015,47 @@ void ConsoleLooper<OutStream, InStream>::ListServers(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::ShowServer(ParamsReader & arg) {
+	String cmd = arg.read("name");
+	if (HELP_COND) {
+		cout << "show server ${NAME}\n";
+		return;
+	}
+	_Server * sr = ctrl.getConfig().findServerByName(cmd);
+	if (sr == nullptr) {
+		cout << "Server is not found";
+		return;
+	}
+
+	cout
+		 << std::setw(5) << "ID"
+		 << std::setw(15) << "Name"
+		 << std::setw(30) << "Host:Port"
+		 << std::setw(10) << "Plugin"
+		 << std::setw(10) << "Mode"
+		 << std::setw(7) << "isTls"
+		 << std::setw(30) << "Host/Path\n";
+	{
+		cout
+			 << std::setw(5) << sr->id
+			 << std::setw(15) << sr->name
+			 << std::setw(30) << (sr->host + ":" + sr->port);
+		{
+			const _V2RayServer * srv = dynamic_cast<const _V2RayServer *> (sr);
+			if (srv != nullptr) {
+				cout
+					 << std::setw(10) << "V2Ray"
+					 << std::setw(10) << srv->mode
+					 << std::setw(7) << srv->isTLS
+					 << std::setw(30) << (srv->v2host + srv->path);
+			}
+		}
+		cout << "\n";
+		cout << "------------------------------------------\n";
+	}
+}
+
+template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::ListTun(ParamsReader & arg) {
 	String cmd = arg.read("Task");
 	if (HELP_COND) {
@@ -2009,6 +2097,43 @@ void ConsoleLooper<OutStream, InStream>::ListVPNMode(ParamsReader & arg) {
 	}
 }
 
+template <typename OutStream, typename InStream>
+void ConsoleLooper<OutStream, InStream>::ShowVPN(ParamsReader & arg) {
+	String cmd = arg.read("Name");
+	if (HELP_COND) {
+		cout << "show vpn ${Name}\n";
+		return;
+	}
+
+	Tun2SocksConfig conf = ctrl.getConfig().findVPNbyName(cmd);
+	if (conf.isNull) {
+		cout << "VPN is not found\n";
+		return;
+	}
+
+	cout
+		 << std::setw(10) << "Name"
+		 << std::setw(15) << "Tun Name"
+		 << std::setw(20) << "Default Route"
+		 << std::setw(5) << "Remove"
+		 << std::setw(10) << "DNS"
+		 << std::setw(17) << "Ignore IP\n";
+
+	{
+		cout
+			 << std::setw(10) << conf.name
+			 << std::setw(15) << conf.tunName
+			 << std::setw(20) << conf.defaultRoute
+			 << std::setw(5) << conf.removeDefaultRoute << "\n";
+			 //<< std::setw(17) << "DN
+			 //<< std::setw(17)
+		for (const String & d: conf.dns)
+			cout << std::setw(60) << d << "\n";
+		for (const String & ip : conf.ignoreIP)
+			cout << std::setw(77) << ip << "\n";
+	}
+}
+
 #undef ec
 
 template <typename OutStream, typename InStream>
@@ -2017,7 +2142,8 @@ void ConsoleLooper<OutStream, InStream>::ListRunning(ParamsReader & arg) {
 	for (const auto & it : list) {
 		const _Task * task = it.second->getTask();
 		const _Server * server = it.second->getServer();
-		cout << task->name << "\tStart on " << task->localHost << ":" << task->localPort << " => " << server->host << ":" << server->port << "\n";
+		const _RunParams & p = it.second->getRunParams();
+		cout << task->name << "\tStart on " << p.localHost << ":" << p.localPort << " => " << server->host << ":" << server->port << "\n";
 	}
 }
 
@@ -2039,6 +2165,8 @@ void ConsoleLooper<OutStream, InStream>::List(ParamsReader & arg) {
 	if (cmd == "variables")
 		ListVariables(arg);
 	if (cmd == "run")
+		ListRun(arg);
+	if (cmd == "runs")
 		ListRunning(arg);
 }
 

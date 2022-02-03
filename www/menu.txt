@@ -1,0 +1,63 @@
+					<ul class="nav">
+						<li class="nav-item">
+							<a href="/servers.html">
+								<i class="la la-server"></i>
+								<p>Servers</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/tasks.html">
+								<i class="la la-play"></i>
+								<p>Tasks</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/runs.html">
+								<i class="la la-arrow-circle-o-right"></i>
+								<p>Run Parametr</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/vpn.html">
+								<i class="la la-wifi"></i>
+								<p>VPN</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/variables.html">
+								<i class="la la-usd"></i>
+								<p>Variables</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/settings.html">
+								<i class="la la-wrench"></i>
+								<p>Settings</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/export.html">
+								<i class="la la la-arrow-right"></i>
+								<p>Export</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/utils.html">
+								<i class="la la la-sellsy"></i>
+								<p>Utils</p>
+							</a>
+						</li>
+						<br><br>
+						<li class="nav-item">
+							<a href="/logout.html">
+								<i class="la la la-sign-out"></i>
+								<p>Logout</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/exit.html">
+								<i class="la la la-power-off"></i>
+								<p>Exit</p>
+							</a>
+						</li>
+					</ul>

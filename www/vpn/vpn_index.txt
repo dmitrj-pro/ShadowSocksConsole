@@ -1,0 +1,47 @@
+						<script>
+							function redirectPost(url, name, value) {
+								var form = document.createElement('form');
+								
+								document.body.appendChild(form);
+								form.method = 'post';
+								form.action = url;
+								var input = document.createElement('input');
+								input.type = 'hidden';
+								input.name = name;
+								input.value = value;
+								form.appendChild(input);
+
+								form.submit();
+								document.body.removeChild(form);
+							}
+							function doEdit(id) {
+								location.href = "/vpn/edit?edit=" + id.toString();
+							}
+							function doDelete(id) {
+								location.href = "/vpn/delete?delete=" + id.toString();
+								return true;
+							}
+							function doNew() {
+								location.href = "/vpn/new";
+							}
+							function doRefresh(id) {
+								location.href = "/vpn/refresh?refresh=" + id.toString();
+							}
+						</script>
+						<i class="la la-plus" onclick="doNew()"></i>
+						<table class="table table-hover sortable">
+							<thead>
+								<tr>
+									<th scope="col">Name</th>
+									<th scope="col">Tun Name</th>
+									<th scope="col">Default Route</th>
+									<th scope="col">Remove default route</th>
+									<th scope="col">DNS</th>
+									<th scope="col">Ignore IP</th>
+									<th scope="col">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{}
+							</tbody>
+						</table>

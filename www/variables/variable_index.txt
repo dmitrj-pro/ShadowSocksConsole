@@ -1,0 +1,24 @@
+						<script>
+							function doNew() {
+								location.href = "/variable/new";
+							}
+							function doEdit(id) {
+								location.href = "/variable/edit?edit=" + id;
+							}
+							function doDelete(id) {
+								location.href = "/variable/delete?delete=" + id;
+							}
+						</script>
+						<i class="la la-plus" onclick="doNew()"></i>
+						<table class="table table-hover sortable">
+							<thead>
+								<tr>
+									<th scope="col">Name</th>
+									<th scope="col">Value</th>
+									<th scope="col">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{}
+							</tbody>
+						</table>

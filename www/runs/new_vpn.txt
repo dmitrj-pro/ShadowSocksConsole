@@ -1,0 +1,4 @@
+<label class="form-radio-label ml-3">
+	<input class="form-radio-input" type="radio" name="vpn" value="{}">
+	<span class="form-radio-sign">{}</span>
+</label>

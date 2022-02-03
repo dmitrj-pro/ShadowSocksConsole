@@ -1,0 +1,4 @@
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="value" value="{}" {}>
+			<span class="form-radio-sign">{}</span>
+		</label>

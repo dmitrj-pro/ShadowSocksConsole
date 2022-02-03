@@ -1,0 +1,7 @@
+${INSTALLED}/ss
+${INSTALLED}/v2ray
+${INSTALLED}/tun2socks
+${INSTALLED}/dns2socks
+${INSTALLED}/sysproxy
+${INSTALLED}/polipo
+${INSTALLED}

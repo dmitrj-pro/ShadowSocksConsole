@@ -1,0 +1,67 @@
+<form method="POST" action="/task/tuns?edit={}" style="display: block;">
+
+	<div style="display:none;" id="BlockForm">
+		<div class="form-check">
+			<label>Protocol:</label><br>
+			<label class="form-radio-label">
+				<input class="form-radio-input" type="radio" name="proto" id="proto" value="tcp">
+				<span class="form-radio-sign">TCP</span>
+			</label>
+			<label class="form-radio-label ml-3">
+				<input class="form-radio-input" type="radio" name="proto" id="proto" value="udp">
+				<span class="form-radio-sign">UDP</span>
+			</label>
+		</div>
+		<div class="form-group">
+			<label for="local_port">Local port</label>
+			<input type="number" min="1" max="65536" class="form-control" id="local_port" name="local_port" placeholder="Enter local tcp port">
+		</div>
+		<div class="form-group">
+			<label for="remote_host">Remote host:</label>
+			<input type="text" class="form-control" id="remote_host" name="remote_host" placeholder="Enter remote host">
+		</div>
+		<div class="form-group">
+			<label for="remote_port">Remote port</label>
+			<input type="number" min="1" max="65536" class="form-control" id="remote_port" name="remote_port" placeholder="Enter remote port">
+		</div>
+		<input type="button" class="btn btn-fail" id="delete" onclick="" value="-"/>
+	</div>
+	<div id="tunsform">
+		{}
+	</div>
+	<script>
+		var proto_id = {};
+		function addElement() {
+			var _form = document.getElementById("tunsform");
+			var _elem = document.getElementById("BlockForm");
+			var c = _elem.cloneNode(true);
+			c.style="display:flex;";
+			c.id = "tun_" + proto_id.toString();
+			c.querySelector("#proto").name = "proto_" + proto_id.toString();
+			c.querySelector("#proto").id = "proto_" + proto_id.toString();
+			c.querySelector("#proto").name = "proto_" + proto_id.toString();
+			c.querySelector("#proto").id = "proto_" + proto_id.toString();
+			
+			c.querySelector("#local_port").name = "local_port_" + proto_id.toString();
+			c.querySelector("#remote_host").name = "remote_host_" + proto_id.toString();
+			c.querySelector("#remote_port").name = "remote_port_" + proto_id.toString();
+			c.querySelector("#delete").setAttribute( "onClick", "javascript: delElement('tun_" + proto_id.toString() + "');" );
+			
+			c.querySelector("#local_port").id = "local_port_" + proto_id.toString();
+			c.querySelector("#remote_host").id = "remote_host_" + proto_id.toString();
+			c.querySelector("#remote_port").id = "remote_port_" + proto_id.toString();
+			c.querySelector("#delete").id = "delete_" + proto_id.toString();
+			
+			proto_id = proto_id + 1;
+			_form.appendChild(c);
+		}
+		function delElement(id) {
+			var elem = document.getElementById(id);
+			return elem.parentNode.removeChild(elem);
+		}
+	</script>
+	<input type="button" class="btn btn-success" onclick="addElement()" value="+"/>
+	<div class="card-action">
+		<button class="btn btn-success">Save</button>
+	</div>
+</form>

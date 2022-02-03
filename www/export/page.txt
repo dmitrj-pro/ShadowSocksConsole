@@ -1,0 +1,51 @@
+<form method="POST">
+	<div class="form-check">
+		<label>Type:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="mode" value="source">
+			<span class="form-radio-sign" style="color:red">Source</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="mode" value="enc">
+			<span class="form-radio-sign">Origin</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="mode" value="json" checked="">
+			<span class="form-radio-sign">Json</span>
+		</label>
+	</div>
+	
+	<div class="form-check">
+		<label>Json type (json only):</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="j_mode" value="desktop">
+			<span class="form-radio-sign">Origin ShadowSocks Desktop</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="j_mode" value="mobile" checked="">
+			<span class="form-radio-sign">Origin ShadowSocks Mobile Client</span>
+		</label>
+	</div>
+	<div class="form-check">
+		<label>Resolve DNS (json only):</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="resolve_dns" value="yes" checked="">
+			<span class="form-radio-sign">Yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="resolve_dns" value="no">
+			<span class="form-radio-sign">No</span>
+		</label>
+	</div>
+	<div class="form-group">
+		<label for="name">Default DNS (json only && Mobile mode):</label>
+		<input type="text" class="form-control" id="default_dns" name="default_dns" placeholder="Enter default DNS server" value="94.140.14.14">
+	</div>
+	<div class="form-group">
+		<label for="host">Path to V2Ray (json only && PC mode):</label>
+		<input type="text" class="form-control" id="v2ray_path" name="v2ray_path" placeholder="Enter path to V2Ray" value="v2ray-plugin">
+	</div>
+	<div class="card-action">
+		<button class="btn btn-success">Export</button>
+	</div>
+</form>

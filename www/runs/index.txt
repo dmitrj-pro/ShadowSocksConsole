@@ -1,0 +1,44 @@
+						<script>
+							function redirectPost(url, name, value) {
+								var form = document.createElement('form');
+								
+								document.body.appendChild(form);
+								form.method = 'post';
+								form.action = url;
+								var input = document.createElement('input');
+								input.type = 'hidden';
+								input.name = name;
+								input.value = value;
+								form.appendChild(input);
+
+								form.submit();
+								document.body.removeChild(form);
+							}
+							function doEdit(id) {
+								location.href = "/runs/edit?edit=" + id;
+							}
+							function doDelete(id) {
+								location.href = "/runs/delete?delete=" + id;
+								return true;
+							}
+							function doNew() {
+								location.href = "/runs/new";
+							}
+						</script>
+						<i class="la la-plus" onclick="doNew()"></i>
+						<table class="table table-hover sortable" id="taskTable">
+							<thead>
+								<tr>
+									<th scope="col">Name</th>
+									<th scope="col">Socks5 host</th>
+									<th scope="col">Http host</th>
+									<th scope="col">SysProxy</th>
+									<th scope="col">MultiConn</th>
+									<th scope="col">VPN</th>
+									<th scope="col">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{}
+							</tbody>
+						</table>

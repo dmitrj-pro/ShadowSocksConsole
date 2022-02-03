@@ -1,0 +1,5 @@
+<form method="POST" action="/server/delete?delete={}">
+	<div class="card-action">
+		<button class="btn btn-danger">Delete</button>
+	</div>
+</form>

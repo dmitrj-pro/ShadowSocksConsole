@@ -9,17 +9,41 @@ using __DP_LIB_NAMESPACE__::List;
 using __DP_LIB_NAMESPACE__::Map;
 
 inline void ReadFuncProc(const String & str) {
-	__DP_LIB_NAMESPACE__::log << str << "\n";
+	DP_LOG_DEBUG << str << "\n";
 }
 
 inline bool isNumber(const String & text) {
-	for (int i = 0; i < text.size(); i++)
+	for (unsigned int i = 0; i < text.size(); i++)
 		if (!(text[i] >= '0' && text[i] <= '9'))
 			return false;
 	return true;
 }
 
+enum class ExitStatusCode { None, Normal, Warning, NetworkError, ApplicationError, UnknowError };
+
+struct ExitStatus {
+	ExitStatusCode code;
+	String str;
+};
+
+typedef std::function<void(const String & , const ExitStatus &) > OnShadowSocksExit;
+typedef std::function<void(const String & ) > OnShadowSocksRunned;
+typedef std::function<void(const String & , const ExitStatus &) > OnShadowSocksError;
+
+
 struct _Server {
+	struct ResultCheck{
+		String ipAddr;
+
+		double speed;
+		String speed_s;
+
+		bool isRun = false;
+		String msg = "";
+	};
+
+	ResultCheck check_result;
+
 	String host = "";
 	String port = "80";
 	String name = "";
@@ -33,6 +57,7 @@ struct _Server {
 	virtual _Server * Copy(_Server * res, std::function<String(const String&)> replacer) const {
 		res->host = replacer(host);
 		res->port = replacer(port);
+		res->check_result = check_result;
 		res->name = name;
 		return res;
 	}
@@ -89,6 +114,34 @@ struct _Tun {
 	UInt remotePort = 0;
 };
 
+struct _RunParams {
+	int localPort = -1;
+	String localHost = "";
+	int httpProxy = -1;
+	bool systemProxy = false;
+	String tun2SocksName = "";
+	String name = "DEFAULT";
+	bool multimode = false;
+	bool isNull = true;
+
+
+	virtual _RunParams * Copy(std::function<String(const String&)> replacer) const {
+		_RunParams * res = new _RunParams();
+		Copy(res, replacer);
+		return res;
+	}
+	virtual _RunParams * Copy(_RunParams * res, std::function<String(const String&)> replacer) const {
+		res->name = name;
+		res->localHost = replacer(localHost);
+		res->localPort = localPort;
+		res->httpProxy = httpProxy;
+		res->systemProxy = systemProxy;
+		res->multimode = multimode;
+		res->tun2SocksName = tun2SocksName;
+		return res;
+	}
+};
+
 struct _Task{
 	String name = "";
 	List<int> servers_id;
@@ -97,13 +150,11 @@ struct _Task{
 	List<_Tun> tuns;
 	static int glob_id;
 	const int id;
-	int localPort = -1;
-	String localHost = "";
-	bool autostart = false;
-	int httpProxy = -1;
-	bool systemProxy = false;
 
-	String tun2SocksName = "";
+	bool autostart = false;
+	bool enable_ipv6 = false;
+
+	String runParamsName = "DEFAULT";
 
 	_Task():id(glob_id) {glob_id++;}
 	_Task(int id):id(id) {}
@@ -128,12 +179,9 @@ struct _Task{
 		res->name = name;
 		res->password = replacer(password);
 		res->method = replacer(method);
-		res->localHost = replacer(localHost);
-		res->localPort = localPort;
 		res->autostart = autostart;
-		res->httpProxy = httpProxy;
-		res->systemProxy = systemProxy;
-		res->tun2SocksName = tun2SocksName;
+		res->enable_ipv6 = enable_ipv6;
+		res->runParamsName = runParamsName;
 		for (int server: servers_id)
 			res->servers_id.push_back(server);
 		for (_Tun tun : tuns) {
@@ -159,33 +207,65 @@ struct Tun2SocksConfig{
 
 class ShadowSocksClient;
 
-struct MakeServerFlags{
+enum SSClientFlagsBoolStatus { None, False, True};
+struct SSClientFlags{
+	bool runVPN = true;
+	String vpnName = "";
+	unsigned short port = 1;
 	String server_name = "";
-	String vpn_name = "";
+	unsigned short http_port = 0;
+	SSClientFlagsBoolStatus sysproxy_s = SSClientFlagsBoolStatus::None;
+	bool deepCheck = true;
+	String listen_host = "";
+	SSClientFlagsBoolStatus multimode = SSClientFlagsBoolStatus::None;
 };
 
 struct ShadowSocksSettings{
 	List<_Server*> servers;
 	List<_Task * > tasks;
-	int defaultPort = 1080;
-	int defaultHttpPort = 8080;
-	String defaultHost = "127.0.0.1";
 	bool autostart = false;
 	String shadowSocksPath = "${INSTALLED}/ss";
 	String v2rayPluginPath = "${INSTALLED}/v2ray";
 	String tun2socksPath = "${INSTALLED}/tun2socks";
 	String dns2socksPath = "${INSTALLED}/dns2socks";
-	String polipoPath = "${INSTALLED}/polipo";
-	String sysproxyPath = "${INSTALLED}/sysproxy";
 	String wgetPath = "${INSTALLED}/wget";
+	bool fixLinuxWgetPath = true;
+	bool enableDeepCheckServer = false;
+	bool autoDetectTunInterface = false;
 	String tempPath = "${INSTALLED}";
 	bool enableLogging = false;
 	bool hideDNS2Socks = true;
 	Map<String, String> variables;
 	UInt udpTimeout = 600;
 	List<Tun2SocksConfig> tun2socksConf;
+	List<_RunParams> runParams;
 	bool IGNORECHECKSERVER = false;
 	String bootstrapDNS = "8.8.8.8";
+	enum class AutoCheckingMode { Off, Passiv, Ip, Speed };
+	inline static String auto_to_str(AutoCheckingMode m) {
+		switch (m) {
+			case AutoCheckingMode::Off: return "Off";
+			case AutoCheckingMode::Ip: return "Ip";
+			case AutoCheckingMode::Passiv: return "Passiv";
+			case AutoCheckingMode::Speed: return "Speed";
+			default: return "Off";
+		}
+	}
+	inline static AutoCheckingMode str_to_auto(const String & m) {
+		if (m == "Off") return AutoCheckingMode::Off;
+		if ( m == "Ip" ) return AutoCheckingMode::Ip;
+		if ( m == "Passiv" ) return AutoCheckingMode::Passiv;
+		if ( m == "Speed" ) return AutoCheckingMode::Speed;
+		return AutoCheckingMode::Off;
+	}
+	AutoCheckingMode auto_check_mode = AutoCheckingMode::Off;
+	unsigned int auto_check_interval_s = 10;
+	String auto_check_ip_url = "https://api4.my-ip.io/ip";
+	String auto_check_download_url = "https://speed.hetzner.de/100MB.bin";
+
+	String __checker_server_name = "";
+	String __checker_task_name = "";
+
 
 
 	bool CheckTask(_Task * t);
@@ -197,16 +277,24 @@ struct ShadowSocksSettings{
 	_Server * findServerByName(const String & name);
 	_Server * findServerById(int id);
 	Tun2SocksConfig findVPNbyName(const String & name);
+
+	_RunParams findRunParamsbyName(const String & name)const ;
+	_RunParams findDefaultRunParams()const ;
+	bool IsCorrect(_RunParams r);
+	void deleteRunParamsByName(const String & name);
+
 	void deleteServerById(int id);
 	void deleteTaskById(int id);
 	void deleteVPNByName(const String & name);
-	String replacePath(const String & path, bool is_dir = false);
+	String replacePath(const String & path, bool is_dir = false) const;
 	String replaceVariables(const String & src) const;
-	inline String getWGetPath() { return this->replacePath(this->wgetPath); }
+	String getWGetPath() const;
 
 	String GetSource();
-	void Load(const String & text);
+	String GetSourceCashe();
+	void LoadCashe(const String & text);
+	void Load(const String & text, bool force);
 
-	ShadowSocksClient * makeServer(int id, const MakeServerFlags & flags);
+	ShadowSocksClient * makeServer(int id, const SSClientFlags & flags);
 };
 

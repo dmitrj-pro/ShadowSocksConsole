@@ -1,0 +1,4 @@
+<label class="form-radio-label ml-3">
+	<input class="form-radio-input" type="radio" name="server" value="{}">
+	<span style="color:{}" class="form-radio-sign">{}</span>
+</label>

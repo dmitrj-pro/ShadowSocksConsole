@@ -1,4 +1,4 @@
-#include "Tun2Socks.h"
+﻿#include "Tun2Socks.h"
 #include <Converter/Converter.h>
 #include <chrono>
 #include <Parser/SmartParser.h>
@@ -9,6 +9,7 @@
 using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::IStrStream;
 using __DP_LIB_NAMESPACE__::trim;
+using __DP_LIB_NAMESPACE__::startWithN;
 using __DP_LIB_NAMESPACE__::SmartParser;
 
 String Tun2Socks::appPath;
@@ -203,7 +204,7 @@ Ethernet adapter tuntap:
 		return "TunTap";
 	}
 	void getCurrentDefaultIface(String & name, String & gw) {
-		__DP_LIB_NAMESPACE__::log << "try detect defaul iface\n";
+		DP_LOG_INFO << "try detect defaul iface\n";
 		Application p ("/sbin/route");
 		p << "-n";
 		String all = p.ExecAll();
@@ -215,7 +216,7 @@ Ethernet adapter tuntap:
 		while (!str.eof()) {
 			String line = "";
 			getline(str, line);
-			__DP_LIB_NAMESPACE__::log << line << "\n";
+			DP_LOG_DEBUG << line << "\n";
 			auto all = LiteralReader::readAllLiterals(line);
 			int status = 0;
 			int i = 0;
@@ -237,6 +238,8 @@ Ethernet adapter tuntap:
 					_gw = val;
 				if (i == 7)
 					_ifname = val;
+				if (_gw.size() > 0 && _ifname.size() > 0)
+					break;
 
 				i++;
 
@@ -245,7 +248,7 @@ Ethernet adapter tuntap:
 				continue;
 
 		}
-		__DP_LIB_NAMESPACE__::log << "Detected interface " << _ifname << " gw = " << _gw << "\n";
+		DP_LOG_INFO << "Detected interface " << _ifname << " gw = " << _gw << "\n";
 		name = _ifname;
 		gw = _gw;
 	}
@@ -255,53 +258,17 @@ Ethernet adapter tuntap:
 		getCurrentDefaultIface(name, gateway);
 		return gateway;
 	}
-	// Есть очень странный косяк, который не могу понять, как исправить нормально. При запуске tun2socks не происходит поднятие сетевого интерфейса.
-	// Если запускать руками, то tun2socks также отказывается поднимать сетевой интерфейс.
-	// При этом программный второй запуск исправляет проблему.
-
-	// Обновление! После запуска тунельного интерфейса ему нужно присвоить IP
-	//route add 92.119.161.225/32 dev tap
-	void HOTFIX(const String & tuns2Socks, const String & tunName) {
-		static bool inited = false;
-		if (inited)
-			return;
-
-		__DP_LIB_NAMESPACE__::log << "Try apply fix start tun2socks\n";
-		Application ap(tuns2Socks);
-		ap << "-proxyServer" << "127.0.0.1:1080";
-		ap << "-proxyType" << "socks";
-		ap << "-tunAddr" << "192.168.198.2";
-		ap << "-tunDns";
-		ap.SetReadedFunc(ReadFuncProc);
-		ap << "127.0.0.1";
-		ap << "-tunGw" << "192.168.198.1";
-		ap << "-tunMask" << "255.255.255.0";
-		ap << "-tunName" << tunName;
-		ap << "-udpTimeout" << "60s";
-		ap << "-loglevel" << "none";
-
-		ap.ExecInNewThread();
-		ap.WaitForStart();
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(40));
-
-		ap.Kill();
-		inited = true;
-		__DP_LIB_NAMESPACE__::log << "Hot fix appyed\n";
-	}
 #endif
 
 List<char> LiteralReader::delimers{'[', ',', ']', '=', '>', '<', ':', ';', '+'/*, '-'*/, ' ', '\n', '\r' };
 
-void Tun2Socks::Start(std::function<void()> _onSuccess, std::function<void()> _onCrash) {
+void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCrash) {
 	if (this->config.dns.size() < 1) {
 		throw EXCEPTION("Need one or more dns servers");
 		return;
 	}
 	#ifdef DP_LIN
 		getCurrentDefaultIface(this->iface_name, this->iface_gw);
-		// Warn
-		HOTFIX(appPath, this->config.tunName);
 	#endif
 	run = new Application(appPath);
 	Application & ap = *run;
@@ -329,7 +296,12 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, std::function<void()> _o
 	ap << "-udpTimeout" << this->udpTimeout;
 	ap << "-loglevel" << "none";
 
-	ap.SetOnCloseFunc(_onCrash);
+	ap.SetOnCloseFunc([this, _onCrash]() {
+		ExitStatus status;
+		status.code = ExitStatusCode::ApplicationError;
+		status.str = "Tun2Socks unexpected exited";
+		_onCrash(config.name, status);
+	});
 
 
 	#ifdef DP_WIN
@@ -362,12 +334,41 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, std::function<void()> _o
 
 		String IF = DetectTunAdapterIF(this->config.tunName);
 		if (IF.size() < 0) {
-			__DP_LIB_NAMESPACE__::log << "Fail to Detect interface id\n";
+			DP_LOG_FATAL << "Fail to Detect interface id\n";
 			return;
 		}
 	#else
 		ap.ExecInNewThread();
 		ap.WaitForStart();
+		if (ap.isFinished()) {
+			DP_LOG_FATAL << "Tun2Socks crashed";
+			ExitStatus status;
+			status.code = ExitStatusCode::ApplicationError;
+			status.str = "Tun2Socks unexpected exited";
+			_onCrash(config.name, status);
+			return;
+		}
+		// Ждем, пока поднимится интерфейс
+		while (true) {
+			Application p ("/sbin/ifconfig");
+			p << "-a";
+			IStrStream in;
+			in.str(p.ExecAll());
+			bool isReady = false;
+			while (!in.eof()) {
+				String line ;
+				getline(in, line);
+				if (startWithN(line, this->config.tunName)) {
+					DP_LOG_DEBUG << "Tun interface ready.";
+					isReady = true;
+					break;
+				}
+			}
+			if (isReady)
+				break;
+			DP_LOG_DEBUG << "Tun interface is not ready. Wait.";
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
 		Application p ("/sbin/ifconfig");
 		//ifconfig tap 192.168.198.2 netmask 255.255.255.0
 		p << this->config.tunName << "192.168.198.2" << "netmask" << "255.255.255.0";
@@ -409,7 +410,9 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, std::function<void()> _o
 		p.Exec();
 	}
 	if (config.removeDefaultRoute) {
-		deleteDefault = new std::thread(&Tun2Socks::ThreadLoop, this);
+		deleteDefault = new __DP_LIB_NAMESPACE__::Thread(&Tun2Socks::ThreadLoop, this);
+		deleteDefault->SetName("Tun2Socks::ThreadLoop");
+		deleteDefault->start();
 	}
 	if (config.isDNS2Socks) {
 		tun2socks = new Application(tun2socksPath);
@@ -419,7 +422,12 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, std::function<void()> _o
 		String tmtp = proxyServer + ":";
 		tmtp = tmtp + toString(proxyPort);
 		t << tmtp << (*this->config.dns.begin()) << "127.0.0.1:53";
-		t.SetOnCloseFunc(_onCrash);
+		t.SetOnCloseFunc([this, _onCrash]() {
+			ExitStatus status;
+			status.code = ExitStatusCode::ApplicationError;
+			status.str = "DNS2Socks unexpected exited";
+			_onCrash(config.name, status);
+		});
 		t.ExecInNewThread();
 		t.WaitForStart();
 	}

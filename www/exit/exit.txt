@@ -1,0 +1,5 @@
+<form method="POST">
+	<div class="card-action">
+		<button class="btn btn-danger">Exit</button>
+	</div>
+</form>

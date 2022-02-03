@@ -7,45 +7,24 @@ THROW=Dmitrj PRO Lib is not set. Install this lib and set in PMake.
 THROW=Dmitrj PRO Lib is not set. Install this lib and set in PMake.
 []
 
+CXXFLAGS=-std=c++11
+
+INCLUDE = DP_LIB
+LIBS = DP_LIB_LIB
+
 [WINDOWS]
 CXXFLAGS=-DDP_WIN
 CXXFLAGS=-DDP_WINDOWS
-LIBS=-lws2_32
+LIBS=-lws2_32 -lwininet -lrasapi32
 []
 [LINUX]
 CXXFLAGS=-DDP_LIN
 CXXFLAGS=-DDP_LINUX
 []
 
-CXXFLAGS=-std=c++11
-
-LIBS = DP_LIB_LIB
-INCLUDE = DP_LIB
-
 LIBS = -static-libstdc++, -static-libgcc, -pthread
 
-[QT]
-{OUT}
-QT		+= core gui
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
-{}
-{END}
-FORMS += \
-	ShadowSocksWindow.ui \
-	PasswordDialog.ui
-{}
-CXXFLAGS=-DDP_QT_GUI
-SOURCE=ShadowSocksWindow.cpp
-HEADER=ShadowSocksWindow.h
-HEADER=PasswordDialog.h
-SOURCE=PasswordDialog.cpp
-
-OUT=ShadowSocksGUI
-[]
-
-[!QT]
 OUT = ShadowSocksConsole
-[]
 
 {Generate version}
 	VERSION=git rev-list master --count ./
@@ -56,16 +35,13 @@ OUT = ShadowSocksConsole
 	printf "#define SS_VERSION \"${VERSION}\"\n" >> VERSION.h
 	printf "#define SS_VERSION_HASHE \"${HASHSE}\"\n" >> VERSION.h
 	printf "#define SS_HEAD_VERSION \"${HEAD_VERSION}\"\n" >> VERSION.h
+	printf "#define SS_FULL_VERSION \"${HEAD_VERSION} (${VERSION})\"\n" >> VERSION.h
 {}
 
 SOURCE = ./main.cpp
 HEADER = ./ShadowSocksMain.h
-SOURCE = ./TCPServer.cpp
-HEADER = ./TCPServer.h
 HEADER = ./TCPChecker.h
 SOURCE = ./TCPChecker.cpp
-SOURCE = ./TCPClient.cpp
-HEADER = ./TCPClient.h
 HEADER = ./ShadowSocks.h
 SOURCE = ./ShadowSocks.cpp
 HEADER = ./Tun2Socks.h
@@ -77,10 +53,57 @@ SOURCE = ./SSClient.cpp
 HEADER = ./ConsoleLoop.h
 SOURCE = ./ConsoleLoop.cpp
 SOURCE = ./ShadowSocksController.cpp
+SOURCE = ./libsysproxy.c
 HEADER = ./ShadowSocksController.h
+SOURCE = ./wwwsrc/WebUI.cpp
+HEADER = ./wwwsrc/WebUI.h
+SOURCE = ./wwwsrc/WebUIServers.cpp
+SOURCE = ./wwwsrc/WebUISettings.cpp
+SOURCE = ./wwwsrc/WebUITasks.cpp
+SOURCE = ./wwwsrc/WebUIVPN.cpp
+SOURCE = ./wwwsrc/WebUIRuns.cpp
+HEADER=sha1.hpp
+SOURCE=sha1.cpp
 HEADER = ./VERSION.h
-HEADER=libSimpleDNS/dns.h
-SOURCE=libSimpleDNS/dns.cpp
 
 HEADER = ./WGetDownloader/Downloader.h
 SOURCE = ./WGetDownloader/Downloader.cpp
+SOURCE = ./WGetDownloader/libproxy/Chain.cpp
+HEADER = ./WGetDownloader/libproxy/Chain.h
+
+SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParser.cpp
+HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParser.h
+SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserHttp.cpp
+HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserHttp.h
+SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserMultiplex.cpp
+HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserMultiplex.h
+SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserSocks5.cpp
+HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserSocks5.h
+SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserTunnel.cpp
+HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserTunnel.h
+
+SOURCE = ./WGetDownloader/libproxy/Connectors/Connector.cpp
+HEADER = ./WGetDownloader/libproxy/Connectors/Connector.h
+SOURCE = ./WGetDownloader/libproxy/Connectors/ConnectorDirect.cpp
+HEADER = ./WGetDownloader/libproxy/Connectors/ConnectorDirect.h
+SOURCE = ./WGetDownloader/libproxy/Connectors/ConnectorHttpProxy.cpp
+HEADER = ./WGetDownloader/libproxy/Connectors/ConnectorHttpProxy.h
+SOURCE = ./WGetDownloader/libproxy/Connectors/ConnectorSocks.cpp
+HEADER = ./WGetDownloader/libproxy/Connectors/ConnectorSocks.h
+HEADER = ./www/textfill.h
+SOURCE = ./www/textfill.cpp
+
+HEADER = ${DP_LIB}/Addon/httpsrv/HttpHostRouter.h
+SOURCE = ${DP_LIB}/Addon/httpsrv/HttpHostRouter.cpp
+HEADER = ${DP_LIB}/Addon/httpsrv/HttpPathRouter.h
+SOURCE = ${DP_LIB}/Addon/httpsrv/HttpPathRouter.cpp
+HEADER = ${DP_LIB}/Addon/httpsrv/HttpRequest.h
+SOURCE = ${DP_LIB}/Addon/httpsrv/HttpRequest.cpp
+HEADER = ${DP_LIB}/Addon/httpsrv/HttpServer.h
+SOURCE = ${DP_LIB}/Addon/httpsrv/HttpServer.cpp
+
+
+{Generate www}
+	RES=bash -c "../../generate-html cast zip"
+{}
+HEADER = ./www/www.h

@@ -1,7 +1,7 @@
 #pragma once
-#include "TCPClient.h"
+#include <Network/TCPClient.h>
 #include <mutex>
-#include <thread>
+#include <_Driver/ThreadWorker.h>
 #include <Types/Exception.h>
 #include <iostream>
 #include "SSServer.h"
@@ -9,13 +9,13 @@
 
 class ShadowSocksRemoteClient{
 	private:
-		std::thread * th;
-		TCPClient client;
+		__DP_LIB_NAMESPACE__::Thread * th;
+		__DP_LIB_NAMESPACE__::TCPClient client;
 		SSStream * stream;
 		bool is_exit = false;
 	public:
-		void Start(int port = 8898) {
-			client.Connect("127.0.0.1", port);
+		void Start(const String & host, unsigned short port = 8898) {
+			client.Connect(host, port);
 			stream = new SSStream([this](char * text, int count) {
 				client.Send(text, count);
 			}, [this](int count) {
@@ -23,7 +23,9 @@ class ShadowSocksRemoteClient{
 			}, [this]() {
 				client.Close();
 			});
-			th = new std::thread(std::bind(&ShadowSocksRemoteClient::ThreadRead, this));
+			th = new __DP_LIB_NAMESPACE__::Thread(&ShadowSocksRemoteClient::ThreadRead, this);
+			th->SetName("ShadowSocksRemoteClient::ThreadRead");
+			th->start();
 			while (!is_exit) {
 				String cmd;
 				getline(std::cin, cmd);

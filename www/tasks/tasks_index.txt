@@ -1,0 +1,95 @@
+						<script>
+							function redirectPost(url, name, value) {
+								var form = document.createElement('form');
+								
+								document.body.appendChild(form);
+								form.method = 'post';
+								form.action = url;
+								var input = document.createElement('input');
+								input.type = 'hidden';
+								input.name = name;
+								input.value = value;
+								form.appendChild(input);
+
+								form.submit();
+								document.body.removeChild(form);
+							}
+							function doEdit(id) {
+								location.href = "/task/edit?edit=" + id.toString();
+							}
+							function doTuns(id) {
+								location.href = "/task/tuns?edit=" + id.toString();
+							}
+							function doDelete(id) {
+								location.href = "/task/delete?delete=" + id.toString();
+								return true;
+							}
+							function doNew() {
+								location.href = "/task/new";
+							}
+							function doCheck() {
+								location.href = "/tasks/check";
+							}
+							function doStart(id) {
+								var doStartButton = document.getElementById("doStartButton_" + id.toString());
+								var doExtendetStartButton = document.getElementById("doExtendetStartButton_" + id.toString());
+								var doCheckButton = document.getElementById("doCheckButton_" + id.toString());
+								
+								doStartButton.setAttribute( "onClick", "" );
+								doExtendetStartButton.setAttribute( "onClick", "" );
+								doCheckButton.setAttribute( "onClick", "" );
+								
+								doStartButton.style="color: red;"
+								doExtendetStartButton.style="color: red;"
+								doCheckButton.style="color: red;"
+							
+								fetch("/task/start", {
+									method: "POST",
+									body: "start=" + id.toString()
+								}).then(function(res) {
+									res.text().then(function(text) {
+										location.reload();
+									});
+								});
+							}
+							function doCheck(id) {
+								location.href = "/task/check?check=" + id.toString();
+							}
+							function doStartSettings(id) {
+								location.href = "/task/start_params?start=" + id.toString();
+							}
+							function doStop(id) {
+								var doStopButton = document.getElementById("doStopButton_" + id.toString() );
+								
+								doStopButton.setAttribute( "onClick", "" + id.toString());
+								
+								doStopButton.style="color: red;"
+								
+								fetch("/task/stop", {
+									method: "POST",
+									body: "stop=" + id.toString()
+								}).then(function(res) {
+									res.text().then(function(text) {
+										location.reload();
+									});
+								});
+							}
+						</script>
+						<i class="la la-plus" onclick="doNew()"></i>
+						<i class="la la-refresh" onclick="doCheck()"></i>
+						<table class="table table-hover sortable" id="taskTable">
+							<thead>
+								<tr>
+									<th scope="col">#</th>
+									<th scope="col">Name</th>
+									<th scope="col">Method</th>
+									<th scope="col">Run Parametr</th>
+									<th scope="col">Servers</th>
+									<th scope="col">Status</th>
+									<th scope="col">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{}
+							</tbody>
+						</table>

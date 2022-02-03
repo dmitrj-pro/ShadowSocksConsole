@@ -1,0 +1,1 @@
+<i id="doStopButton_{}" class="la la-stop" onclick="doStop({})"></i>
