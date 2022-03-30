@@ -333,7 +333,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 			*state = -99090;
 
 		String IF = DetectTunAdapterIF(this->config.tunName);
-		if (IF.size() < 0) {
+		if (IF.size() == 0) {
 			DP_LOG_FATAL << "Fail to Detect interface id\n";
 			return;
 		}

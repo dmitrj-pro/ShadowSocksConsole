@@ -47,6 +47,7 @@ struct _Server {
 	String host = "";
 	String port = "80";
 	String name = "";
+	String group = "";
 	const int id = 0;
 	static int glob_id;
 	virtual ~_Server(){}
@@ -59,6 +60,7 @@ struct _Server {
 		res->port = replacer(port);
 		res->check_result = check_result;
 		res->name = name;
+		res->group = group;
 		return res;
 	}
 
@@ -123,6 +125,8 @@ struct _RunParams {
 	String name = "DEFAULT";
 	bool multimode = false;
 	bool isNull = true;
+	enum class ShadowSocksType {None, GO, Rust};
+	ShadowSocksType shadowsocks_type = ShadowSocksType::None;
 
 
 	virtual _RunParams * Copy(std::function<String(const String&)> replacer) const {
@@ -138,12 +142,32 @@ struct _RunParams {
 		res->systemProxy = systemProxy;
 		res->multimode = multimode;
 		res->tun2SocksName = tun2SocksName;
+		res->shadowsocks_type = shadowsocks_type;
 		return res;
 	}
 };
+inline _RunParams::ShadowSocksType parseSSType(const String & s) {
+	if (s == "go")
+		return  _RunParams::ShadowSocksType::GO;
+	if (s == "rust")
+		return _RunParams::ShadowSocksType::Rust;
+	if (s == "none")
+		return _RunParams::ShadowSocksType::None;
+	return _RunParams::ShadowSocksType::GO;
+}
+inline String SSTtypetoString(_RunParams::ShadowSocksType t){
+	if (t == _RunParams::ShadowSocksType::GO)
+		return "go";
+	if (t == _RunParams::ShadowSocksType::Rust)
+		return "rust";
+	if (t == _RunParams::ShadowSocksType::None)
+		return "none";
+	return "none";
+}
 
 struct _Task{
 	String name = "";
+	String group = "";
 	List<int> servers_id;
 	String password = "";
 	String method = "";
@@ -177,6 +201,7 @@ struct _Task{
 	}
 	virtual _Task * Copy(_Task * res, std::function<String(const String&)> replacer) const {
 		res->name = name;
+		res->group = group;
 		res->password = replacer(password);
 		res->method = replacer(method);
 		res->autostart = autostart;
@@ -218,6 +243,7 @@ struct SSClientFlags{
 	bool deepCheck = true;
 	String listen_host = "";
 	SSClientFlagsBoolStatus multimode = SSClientFlagsBoolStatus::None;
+	_RunParams::ShadowSocksType type = _RunParams::ShadowSocksType::None;
 };
 
 struct ShadowSocksSettings{
@@ -225,6 +251,8 @@ struct ShadowSocksSettings{
 	List<_Task * > tasks;
 	bool autostart = false;
 	String shadowSocksPath = "${INSTALLED}/ss";
+	String shadowSocksPathRust = "${INSTALLED}/ss-rust";
+	_RunParams::ShadowSocksType shadowSocksType = _RunParams::ShadowSocksType::GO;
 	String v2rayPluginPath = "${INSTALLED}/v2ray";
 	String tun2socksPath = "${INSTALLED}/tun2socks";
 	String dns2socksPath = "${INSTALLED}/dns2socks";

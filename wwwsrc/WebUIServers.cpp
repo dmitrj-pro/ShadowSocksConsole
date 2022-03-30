@@ -10,11 +10,39 @@ using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::ConteinsKey;
 using __DP_LIB_NAMESPACE__::parse;
 using __DP_LIB_NAMESPACE__::trim;
+using __DP_LIB_NAMESPACE__::SmartParser;
 
 Request WebUI::processGetServers(Request req) {
+	String filter_group = "";
+	if (ConteinsKey(req->get, "group"))
+		filter_group = req->get["group"];
+	String filter_name = "";
+	if (ConteinsKey(req->get, "name"))
+		filter_name = req->get["name"];
+	SmartParser filter_name_parser{"*" + filter_name + "*"};
+
 	OStrStream out;
 	const auto & servers = ShadowSocksController::Get().getConfig().servers;
+	OStrStream group_gen;
+	group_gen << findFillText("servers/index_group_list_item.txt", List<String>( {
+																						 ( filter_group == "" ) ? findText("servers/index_group_list_item_selected.txt") : findText("servers/index_group_list_item_unselected.txt"),
+																						 ""
+																					 }));
+	__DP_LIB_NAMESPACE__::Map<String, bool> added;
 	for (_Server * s : servers) {
+		if (!ConteinsKey(added, s->group) && s->group.size() > 0) {
+			group_gen << findFillText("servers/index_group_list_item.txt", List<String>( {
+																								 ( s->group.size() > 0 && s->group == filter_group ) ? findText("servers/index_group_list_item_selected.txt") : findText("servers/index_group_list_item_unselected.txt"),
+																								 s->group
+																							 }));
+			added[s->group] = true;
+		}
+
+		if (filter_group.size() > 0 && filter_group != s->group)
+			continue;
+		if (filter_name.size() > 0 && !filter_name_parser.Check(s->name))
+			continue;
+
 		String plugin = "-";
 		String mode ="";
 		String enable_tls = "";
@@ -62,7 +90,16 @@ Request WebUI::processGetServers(Request req) {
 														  }));
 	}
 
-	String html = makePage("Servers", "servers/servers_index.txt", List<String>( { out.str()}));
+	for (_Task * t : ShadowSocksController::Get().getConfig().tasks)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("servers/index_group_list_item.txt", List<String>( {
+																								 ( t->group.size() > 0 && t->group == filter_group ) ? findText("servers/index_group_list_item_selected.txt") : findText("servers/index_group_list_item_unselected.txt"),
+																								 t->group
+																							 }));
+			added[t->group] = true;
+		}
+
+	String html = makePage("Servers", "servers/servers_index.txt", List<String>( { filter_name, group_gen.str(), out.str()}));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
@@ -110,9 +147,24 @@ Request WebUI::processGetServerEditPage(Request req) {
 		v_path = v->path;
 	}
 
+	OStrStream group_gen;
+	__DP_LIB_NAMESPACE__::Map<String, bool> added;
+	for (_Server * t : ShadowSocksController::Get().getConfig().servers)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("servers/group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+	for (_Task * t : ShadowSocksController::Get().getConfig().tasks)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("servers/group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+
 	String html = makePage("New server", "servers/edit.txt", List<String>({
 																toString(_t->id),
 																_t->name,
+																_t->group,
+																group_gen.str(),
 																_t->host,
 																_t->port,
 																!is_v2ray ? findText("servers/checket_true.txt") : findText("servers/checket_false.txt"),
@@ -165,6 +217,7 @@ Request WebUI::processPostServerEditPage(Request req) {
 
 	_Server * sr = _sr->Copy([](const String & txt) { return txt; });
 	readParametr(sr->name, "name", sr);
+	readParametr(sr->group, "group", sr);
 	readParametr(sr->host, "host", sr);
 	readParametr(sr->port, "port", sr);
 
@@ -208,8 +261,21 @@ Request WebUI::processPostServerEditPage(Request req) {
 
 	return makeRedirect(req, "/servers.html");
 }
-Request WebUI::processGetNewServerPage(Request req) {
-	String html = makePage("New server", "servers/new.txt", List<String>({}));
+Request WebUI::processGetNewServerPage(Request) {
+	OStrStream group_gen;
+	__DP_LIB_NAMESPACE__::Map<String, bool> added;
+	for (_Server * t : ShadowSocksController::Get().getConfig().servers)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("servers/group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+	for (_Task * t : ShadowSocksController::Get().getConfig().tasks)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("servers/group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+
+	String html = makePage("New server", "servers/new.txt", List<String>({group_gen.str()}));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
@@ -223,6 +289,7 @@ Request WebUI::processPostNewServerPage(Request req) {
 	_Server * sr = new _Server();
 
 	readParametr(sr->name, "name", sr);
+	readParametr(sr->group, "group", sr);
 	readParametr(sr->host, "host", sr);
 	readParametr(sr->port, "port", sr);
 

@@ -1,7 +1,9 @@
 #include "textfill.h"
 #include "www.h"
 
-INIT_ZIP_HEADER
+#ifdef INIT_ZIP_HEADER
+	INIT_ZIP_HEADER
+#endif
 
 String fillText(const String & text, const List<String> & args) {
 	String res = "";
@@ -28,7 +30,7 @@ String findText(const String & text) {
 	return findCode(text);
 }
 
-char * findResourc(const std::string & file, unsigned long & size) {
+char * findResourc(const std::string & file, unsigned long long & size) {
 	return findResource(file, size);
 }
 

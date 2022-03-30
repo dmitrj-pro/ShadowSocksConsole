@@ -45,6 +45,21 @@
 			<span class="form-radio-sign">no</span>
 		</label>
 	</div>
+	<div class="form-check">
+		<label>ShadowSocksType:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="shadowSocksType" value="default" {}>
+			<span class="form-radio-sign">Default</span>
+		</label>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="shadowSocksType" value="go" {}>
+			<span class="form-radio-sign">GO</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="shadowSocksType" value="rust" {}>
+			<span class="form-radio-sign">Rust</span>
+		</label>
+	</div>
 	
 	<div class="form-group">
 		<label for="local_port">Local Socks5 port (1080?)</label>

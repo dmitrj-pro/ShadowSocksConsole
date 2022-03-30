@@ -28,7 +28,9 @@
 								location.href = "/vpn/refresh?refresh=" + id.toString();
 							}
 						</script>
-						<i class="la la-plus" onclick="doNew()"></i>
+						<div class="form-group" style="display: flex">
+							<i class="la la-plus" onclick="doNew()" style="font-size: large"></i>
+						</div>
 						<table class="table table-hover sortable">
 							<thead>
 								<tr>

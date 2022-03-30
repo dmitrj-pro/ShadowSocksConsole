@@ -34,6 +34,9 @@ Content-Type: text/html\r\n\
 	</body>\r\n\
 </html>";
 
+	#ifdef BUFFER_SIZE
+		#undef BUFFER_SIZE
+	#endif
 	#define BUFFER_SIZE 1024
 	if (strncmp(buffer, "CONNECT", 7) == 0) {
 		char buffer[BUFFER_SIZE];

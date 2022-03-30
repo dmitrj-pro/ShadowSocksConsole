@@ -4,6 +4,13 @@
 		<input type="text" class="form-control" id="name" name="name" placeholder="Enter server name">
 	</div>
 	<div class="form-group">
+		<label for="group">Server group:</label>
+		<input type="text" class="form-control" id="group" name="group" placeholder="Enter server group" list="groupList">
+		<datalist id="groupList">
+			{}
+		</datalist>
+	</div>
+	<div class="form-group">
 		<label for="host">Remote host domain or ip:</label>
 		<input type="text" class="form-control" id="host" name="host" placeholder="Enter host address">
 	</div>

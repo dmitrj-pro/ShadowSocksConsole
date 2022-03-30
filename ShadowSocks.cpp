@@ -38,8 +38,25 @@ UInt ShadowSocksClient::findAllowPort(const String & host) {
 
 String ReadAllFile(const String & file);
 
+inline String metho_from_go_to_rust(const String & str) {
+	if (str == "AEAD_AES_128_GCM")
+		return "aes-128-gcm";
+	if (str == "AEAD_AES_256_GCM")
+		return "aes-256-gcm";
+	if (str == "AEAD_CHACHA20_POLY1305")
+		return "chacha20-ietf-poly1305";
+	throw EXCEPTION("Can't convert " + str + " to shadowsocks-rust format");
+}
+
+String convertTime(UInt time);
+
 void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSuccess) {
 	status = ShadowSocksClientStatus::Running;
+	{
+		Path p {shadowSocks};
+		if (!p.IsFile())
+			throw EXCEPTION("ShadowSocks not found: " + shadowSocks);
+	};
 
 	if (flags.port > 5)
 		run_params.localPort = flags.port;
@@ -101,17 +118,23 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 		_multimode_server_thread = new __DP_LIB_NAMESPACE__::Thread([this, port]() {
 			unsigned short pos = 0;
 			this->_multimode_server.ThreadListen(this->srv->host, port, [this, &pos](__DP_LIB_NAMESPACE__::TCPServerClient cl){
-				pos ++;
-				if (pos >= this->_multimode_servers.size())
-					pos = 0;
-				const MultiModeServerStruct & data = this->_multimode_servers[pos];
-				TCPClient target;
-				if (data.v2ray == nullptr)
-					target.Connect(data.srv->host, data.port);
-				else
-					target.Connect(data.host, data.port);
-				SocketReader buff(&cl);
-				tcpLoop(buff, &target);
+				const MultiModeServerStruct & data = this->_multimode_servers[pos % this->_multimode_servers.size()];
+				try {
+					pos = (pos + 1) % this->_multimode_servers.size();
+					TCPClient target;
+					if (data.v2ray == nullptr)
+						target.Connect(data.srv->host, data.port);
+					else
+						target.Connect(data.host, data.port);
+					SocketReader buff(&cl);
+					tcpLoop(buff, &target);
+				} catch (const __DP_LIB_NAMESPACE__::LineException e) {
+					DP_LOG_ERROR << "Catch exception: " << e.toString();
+				} catch (const std::exception & e) {
+					DP_LOG_ERROR << "Catch system exception" << e.what();
+				} catch (...) {
+					DP_LOG_ERROR << "Catch unknown exception";
+				}
 			});
 		});
 		_multimode_server_thread->start();
@@ -127,26 +150,45 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 
 	if (ser != nullptr) {
 		DP_PRINT_VAL_0(v2rayPlugin);
-		s << "-plugin" << ("\"" + v2rayPlugin + "\"");
 		String cmd = "mode=" + ser->mode + ";";
 		if (ser->isTLS)
 			cmd += "tls;";
 		cmd += "host=" + ser->v2host + ";path=" + ser->path;
-		s << "-plugin-opts" << ("\"" + cmd + "\"");
+		if (shadowsocks_type == _RunParams::ShadowSocksType::GO) {
+			s << "-plugin" << ("\"" + v2rayPlugin + "\"");
+			s << "-plugin-opts" << ("\"" + cmd + "\"");
+		} else {
+			s << "--plugin" << ("\"" + v2rayPlugin + "\"");
+			s << "--plugin-opts" << ("\"" + cmd + "\"");
+		}
 	}
 	// Включить тунелирование UDP
-	s << "-u";
-	s << "-udptimeout" << this->udpTimeout;
-	s << "-password" << tk->password;
-	s << "-c" << (host + ":" + __DP_LIB_NAMESPACE__::toString(port));
-	s << "-socks" << (run_params.localHost + ":" + __DP_LIB_NAMESPACE__::toString(run_params.localPort));
-	s << "-cipher" << tk->method;
+	if (shadowsocks_type == _RunParams::ShadowSocksType::GO) {
+		s << "-u";
+		s << "-udptimeout" << convertTime(this->udpTimeout);
+		s << "-password" << tk->password;
+		s << "-c" << (host + ":" + __DP_LIB_NAMESPACE__::toString(port));
+		s << "-socks" << (run_params.localHost + ":" + __DP_LIB_NAMESPACE__::toString(run_params.localPort));
+		s << "-cipher" << tk->method;
+	} else {
+		s << "-U";
+		if (tk->enable_ipv6)
+			s << "-6";
+		s << "--udp-timeout" << this->udpTimeout;
+		s << "--password" << tk->password;
+		s << "--server-addr" << (host + ":" + __DP_LIB_NAMESPACE__::toString(port));
+		s << "--local-addr" << (run_params.localHost + ":" + __DP_LIB_NAMESPACE__::toString(run_params.localPort));
+		s << "--encrypt-method" << metho_from_go_to_rust(tk->method);
+
+	}
 
 	{
 		__DP_LIB_NAMESPACE__::OStrStream tcpTuns;
 		__DP_LIB_NAMESPACE__::OStrStream udpTuns;;
 
 		for (_Tun tun : tk->tuns) {
+			if (shadowsocks_type == _RunParams::ShadowSocksType::Rust)
+				throw EXCEPTION("Tunnel mode is not supported for shadowsocks-rust");
 			DP_PRINT_VAL_0(tun.localPort);
 			if (tun.type == TunType::TCP)
 				tcpTuns << tun.localHost << ":" << tun.localPort << "=" << tun.remoteHost << ":" << tun.remotePort << ",";
@@ -181,7 +223,7 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 		tun2socks->proxyServer = run_params.localHost;
 		if (!run_params.multimode)
 			tun2socks->config.ignoreIP.push_back(srv->host);
-		tun2socks->SetUDPTimeout(this->udpTimeout);
+		tun2socks->SetUDPTimeout(convertTime(this->udpTimeout));
 		tun2socks->Start([this, _onSuccess] () {
 			if (!_socks->isFinished()) {
 				this->status = ShadowSocksClientStatus::Started;
@@ -295,7 +337,7 @@ void ShadowSocksClient::_Stop() {
 	_is_exit = true;
 	if (tun2socks != nullptr) {
 		tun2socks->Stop();
-		//delete tun2socks;
+		delete tun2socks;
 		tun2socks = nullptr;
 	}
 	if (_socks != nullptr) {
@@ -344,14 +386,10 @@ void ShadowSocksClient::_Stop() {
 }
 
 void ShadowSocksClient::Stop(bool is_async) {
-	//_Stop();
 	if (is_async) {
 		__DP_LIB_NAMESPACE__::Thread * th = new __DP_LIB_NAMESPACE__::Thread(&ShadowSocksClient::_Stop, this);
 		th->SetName("ShadowSocksClient::Stop impl");
 		th->start();
 	} else
 		_Stop();
-	//th->join();
-	//ToDo
-	//delete th;
 }

@@ -46,7 +46,7 @@ Request WebUI::processPostTaskEdit(Request req) {
 		tk->tun2SocksName = "";
 */
 
-Request WebUI::processGetRuns(Request req) {
+Request WebUI::processGetRuns(Request) {
 	OStrStream out;
 	const auto & tuns = ShadowSocksController::Get().getConfig().runParams;
 	for (auto t : tuns) {
@@ -73,7 +73,7 @@ Request WebUI::processGetRuns(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetAddRuns(Request req) {
+Request WebUI::processGetAddRuns(Request) {
 	_RunParams params = ShadowSocksController::Get().getConfig().findDefaultRunParams();
 
 	OStrStream vpn_gen;
@@ -119,7 +119,10 @@ Request WebUI::processPostAddRuns(Request req) {
 	readParametr_nd(cnf.localHost, "local_host");
 	readParametr_nt(cnf.localPort, "local_port", int);
 	readParametr_nt(cnf.httpProxy, "local_http_port", int);
-	String rem = "";
+	String rem = SSTtypetoString(_RunParams::ShadowSocksType::None);
+	readParametr_nd(rem, "shadowSocksType");
+	if (rem == "default") rem = SSTtypetoString(_RunParams::ShadowSocksType::None);
+	cnf.shadowsocks_type = parseSSType(rem);
 	readParametr_nd(rem, "sysproxy");
 	cnf.systemProxy = rem == "yes";
 	readParametr_nd(rem, "multimode");
@@ -184,6 +187,15 @@ Request WebUI::processGetEditRuns(Request req) {
 																							  !cnf.multimode ?
 																								findText("runs/new_checked_true.txt"):
 																								findText("runs/new_checked_false.txt"),
+																							  cnf.shadowsocks_type == _RunParams::ShadowSocksType::None ?
+																								findText("runs/new_checked_true.txt"):
+																								findText("runs/new_checked_false.txt"),
+																							  cnf.shadowsocks_type == _RunParams::ShadowSocksType::GO ?
+																								findText("runs/new_checked_true.txt"):
+																								findText("runs/new_checked_false.txt"),
+																							  cnf.shadowsocks_type == _RunParams::ShadowSocksType::Rust ?
+																								findText("runs/new_checked_true.txt"):
+																								findText("runs/new_checked_false.txt"),
 																							  cnf.tun2SocksName.size() == 0 ?
 																								findText("runs/new_checked_true.txt"):
 																								findText("runs/new_checked_false.txt"),
@@ -211,7 +223,10 @@ Request WebUI::processPostEditRuns(Request req) {
 	readParametr_nd(cnf.localHost, "local_host");
 	readParametr_nt(cnf.localPort, "local_port", int);
 	readParametr_nt(cnf.httpProxy, "local_http_port", int);
-	String rem = "";
+	String rem = SSTtypetoString(_RunParams::ShadowSocksType::None);
+	readParametr_nd(rem, "shadowSocksType");
+	if (rem == "default") rem = SSTtypetoString(_RunParams::ShadowSocksType::None);
+	cnf.shadowsocks_type = parseSSType(rem);
 	readParametr_nd(rem, "sysproxy");
 	cnf.systemProxy = rem == "yes";
 	readParametr_nd(rem, "multimode");

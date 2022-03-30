@@ -58,7 +58,7 @@ struct Tun2Socks {
 class WordReader{
 	private:
 		String text;
-		int pos = -1;
+		unsigned int pos = 0;
 		List<char> delimers;
 	public:
 		WordReader(const String & text, const List<char> & delimers) : text(text), pos(0), delimers(delimers) {}

@@ -295,7 +295,7 @@ void WebUI::UpdateTaskStatus(const String & server, const String & msg) {
 		notifyUser(it->cookie, server + " " + msg);
 }
 
-Request WebUI::processGetExport(Request req) {
+Request WebUI::processGetExport(Request) {
 	String html = makePage("Export", "export/page.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -377,7 +377,7 @@ Request WebUI::processGetLogout(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetExit(Request req) {
+Request WebUI::processGetExit(Request) {
 	String html = makePage("Exit", "Close ShadowSocks", "exit/exit.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -385,7 +385,7 @@ Request WebUI::processGetExit(Request req) {
 	resp->body_length = html.size();
 	return resp;
 }
-Request WebUI::processPostExit(Request req) {
+Request WebUI::processPostExit(Request) {
 	Thread * th = new Thread([]() {
 		__DP_LIB_NAMESPACE__::ServiceSinglton::Get().ExecuteClose();
 	});
@@ -400,7 +400,7 @@ Request WebUI::processPostExit(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetUtils(Request req, const UtilsStruct & res) {
+Request WebUI::processGetUtils(Request, const UtilsStruct & res) {
 	OStrStream out;
 	for (const String & ip : res.resolve_result)
 		out << "<p>" << ip << "</p>";

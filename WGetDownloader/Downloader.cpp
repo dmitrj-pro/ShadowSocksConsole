@@ -87,8 +87,8 @@ bool Downloader::Download(const String & url, const String & saveTo) {
 
 	(*app) << "--output-document" << saveTo;
 	(*app) << url;
-	app->SetReadedFunc([](const String & str) {
-		//log << str << "\n";
+	app->SetReadedFunc([](const String & ) {
+
 	});
 	app->Exec();
 	bool res = app->ResultCode() == 0;

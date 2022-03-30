@@ -100,7 +100,7 @@ struct SSStream {
 					send [0] = val.size();
 					copy(val.begin(), val.end(), &(send[1]));
 					auto tr = DP_LOG_TRACE;
-					for (int i =0; i < val.size() + 2; i++) {
+					for (unsigned int i =0; i < val.size() + 2; i++) {
 						tr << (i==0 ? "" : " ") << (int)val[i];
 					}
 					_sendf(send, val.size() + 1);

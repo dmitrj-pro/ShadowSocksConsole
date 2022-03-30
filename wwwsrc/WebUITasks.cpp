@@ -14,6 +14,7 @@ using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::ConteinsKey;
 using __DP_LIB_NAMESPACE__::parse;
 using __DP_LIB_NAMESPACE__::trim;
+using __DP_LIB_NAMESPACE__::SmartParser;
 
 Request WebUI::processPostTaskStartPage(Request req) {
 	auto user_id = req->cookie["auth"];
@@ -49,6 +50,11 @@ Request WebUI::processPostTaskStartPage(Request req) {
 		readParametr_n(tmp, "NOVPN");
 		flags.runVPN = tmp == "no";
 
+		tmp = SSTtypetoString(_RunParams::ShadowSocksType::None);
+		readParametr_n(tmp, "shadowSocksType");
+		if (tmp == "default") tmp = SSTtypetoString(_RunParams::ShadowSocksType::None);
+		flags.type = parseSSType(tmp);
+
 		readParametr_n(tmp, "sysproxy");
 		flags.sysproxy_s = tmp == "yes" ? SSClientFlagsBoolStatus::True : (tmp == "no" ? SSClientFlagsBoolStatus::False : SSClientFlagsBoolStatus::None);
 
@@ -64,9 +70,13 @@ Request WebUI::processPostTaskStartPage(Request req) {
 			flags.server_name = tmp;
 
 
-		ctrl.StartByName(t->name, [this, user_id] (const String & name) {
-			notifyUser(user_id, "Task " + name + " succesfully started\n");
-		}, funcCrash, flags);
+		try{
+			ctrl.StartByName(t->name, [this, user_id] (const String & name) {
+				notifyUser(user_id, "Task " + name + " succesfully started\n");
+			}, funcCrash, flags);
+		} catch (__DP_LIB_NAMESPACE__::LineException e) {
+			notifyUser(user_id, "Fail to start task " + t->name + ": " + e.toString());
+		}
 
 		if (nocheck) {
 			auto & cnf = ctrl.getConfig();
@@ -251,6 +261,7 @@ Request WebUI::processPostTaskEdit(Request req) {
 
 
 	readParametr(tk->name, "name", tk);
+	readParametr(tk->group, "group", tk);
 	readParametr(tk->method, "method", tk);
 	readParametr(tk->password, "password", tk);
 	readParametr_boolv(tk->enable_ipv6, "ipv6", false);
@@ -310,6 +321,7 @@ Request WebUI::processGetTaskEditPage(Request req) {
 	const auto & servers = ShadowSocksController::Get().getConfig().servers;
 	for (const _Server * s : servers)
 		server_gen << findFillText("tasks/tasks_edit_server.txt", List<String>({
+																					s->group,
 																					s->name,
 																					__DP_LIB_NAMESPACE__::ConteinsElement(_t->servers_id, s->id) ?
 																						findText("tasks/tasks_edit_selected_true.txt") :
@@ -318,9 +330,26 @@ Request WebUI::processGetTaskEditPage(Request req) {
 																			   }));
 
 
+	OStrStream group_gen;
+	__DP_LIB_NAMESPACE__::Map<String, bool> added;
+	for (_Task * t : ShadowSocksController::Get().getConfig().tasks)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("tasks/task_group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+	for (_Server * t : ShadowSocksController::Get().getConfig().servers)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("tasks/task_group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+
+
+
 	String html = makePage("Edit task " + _t->name, "tasks/tasks_edit.txt", List<String>({
 															toString(_t->id),
 															_t->name,
+															_t->group,
+															group_gen.str(),
 															_t->method == "AEAD_CHACHA20_POLY1305" ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
@@ -360,6 +389,7 @@ Request WebUI::processPostNewTaskPage(Request req) {
 	auto & ctrl = ShadowSocksController::Get();
 
 	readParametr(tk->name, "name", tk);
+	readParametr(tk->group, "group", tk);
 	readParametr(tk->method, "method", tk);
 	readParametr(tk->password, "password", tk);
 	readParametr_boolv(tk->enable_ipv6, "ipv6", false);
@@ -411,7 +441,7 @@ Request WebUI::processPostCheckServers(Request req) {
 	return makeRedirect(req, "/tasks.html");
 }
 
-Request WebUI::processGetCheckServers(Request req) {
+Request WebUI::processGetCheckServers(Request) {
 	_ShadowSocksController::CheckLoopStruct args = ShadowSocksController::Get().makeCheckStruct();
 
 	String html = makePage("Check tasks", "tasks/check.txt", List<String>({ args.checkIpUrl, args.downloadUrl }));
@@ -483,10 +513,23 @@ Request WebUI::processGetNewTaskPage(Request req) {
 	OStrStream server_gen;
 	const auto & servers = ShadowSocksController::Get().getConfig().servers;
 	for (const _Server * s : servers)
-		server_gen << findFillText("tasks/tasks_new_server.txt", List<String>({s->name}));
+		server_gen << findFillText("tasks/tasks_new_server.txt", List<String>({s->group, s->name}));
+
+	OStrStream group_gen;
+	__DP_LIB_NAMESPACE__::Map<String, bool> added;
+	for (_Task * t : ShadowSocksController::Get().getConfig().tasks)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("tasks/task_group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
+	for (_Server * t : ShadowSocksController::Get().getConfig().servers)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("tasks/task_group_list_item.txt", List<String>( {t->group}));
+			added[t->group] = true;
+		}
 
 
-	String html = makePage("New task", "tasks/tasks_new.txt", List<String>({vpn_gen.str(), server_gen.str()}));
+	String html = makePage("New task", "tasks/tasks_new.txt", List<String>({group_gen.str(), vpn_gen.str(), server_gen.str()}));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
@@ -591,6 +634,15 @@ Request WebUI::processGetTaskStartPage(Request req) {
 															!run_params.multimode ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
+															run_params.shadowsocks_type == _RunParams::ShadowSocksType::None ?
+																findText("tasks/tasks_edit_checket_true.txt") :
+																findText("tasks/tasks_edit_checket_false.txt"),
+															 run_params.shadowsocks_type == _RunParams::ShadowSocksType::GO ?
+																 findText("tasks/tasks_edit_checket_true.txt") :
+																 findText("tasks/tasks_edit_checket_false.txt"),
+															 run_params.shadowsocks_type == _RunParams::ShadowSocksType::Rust ?
+																 findText("tasks/tasks_edit_checket_true.txt") :
+																 findText("tasks/tasks_edit_checket_false.txt"),
 															toString(run_params.localPort),
 															toString(run_params.httpProxy),
 															vpn_gen.str(),
@@ -608,6 +660,14 @@ void calcSizeAndText(double origin, double & res, String & res_s);
 void calcToBytes(double origin, String res_s, double & res);
 
 Request WebUI::processGetTasks(Request req) {
+	String filter_group = "";
+	if (ConteinsKey(req->get, "group"))
+		filter_group = req->get["group"];
+	String filter_name = "";
+	if (ConteinsKey(req->get, "name"))
+		filter_name = req->get["name"];
+	SmartParser filter_name_parser{"*" + filter_name + "*"};
+
 	OStrStream out;
 	const auto & tasks = ShadowSocksController::Get().getConfig().tasks;
 	auto running = ShadowSocksController::Get().getRunning();
@@ -619,7 +679,27 @@ Request WebUI::processGetTasks(Request req) {
 		ShadowSocksClient * t = nullptr;
 		return t;
 	};
+	OStrStream group_gen;
+	__DP_LIB_NAMESPACE__::Map<String, bool> added;
+
+	group_gen << findFillText("tasks/tasks_index_group_list_item.txt", List<String>( {
+																						 ( filter_group == "" ) ? findText("tasks/tasks_index_group_list_item_selected.txt") : findText("tasks/tasks_index_group_list_item_unselected.txt"),
+																						 ""
+																					 }));
+
 	for (_Task * t : tasks) {
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("tasks/tasks_index_group_list_item.txt", List<String>( {
+																								 ( t->group.size() > 0 && t->group == filter_group ) ? findText("tasks/tasks_index_group_list_item_selected.txt") : findText("tasks/tasks_index_group_list_item_unselected.txt"),
+																								 t->group
+																							 }));
+			added[t->group] = true;
+		}
+		if (filter_group.size() > 0 && filter_group != t->group)
+			continue;
+		if (filter_name.size() > 0 && !filter_name_parser.Check(t->name))
+			continue;
+
 		OStrStream sr;
 		// 0 - unknown
 		// 1 - fail
@@ -736,8 +816,16 @@ Request WebUI::processGetTasks(Request req) {
 															  toString(t->id)
 														  }));
 	}
+	for (_Server * t : ShadowSocksController::Get().getConfig().servers)
+		if (!ConteinsKey(added, t->group) && t->group.size() > 0) {
+			group_gen << findFillText("tasks/tasks_index_group_list_item.txt", List<String>( {
+																								 ( t->group.size() > 0 && t->group == filter_group ) ? findText("tasks/tasks_index_group_list_item_selected.txt") : findText("tasks/tasks_index_group_list_item_unselected.txt"),
+																								 t->group
+																							 }));
+			added[t->group] = true;
+		}
 
-	String html = makePage("Tasks", "tasks/tasks_index.txt", List<String>( { out.str()}));
+	String html = makePage("Tasks", "tasks/tasks_index.txt", List<String>( { filter_name, group_gen.str(), out.str()}));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());

@@ -36,7 +36,7 @@ template <typename OutStream, typename InStream>
 class ParamsReaderTemplate {
 	private:
 		Vector<String> params;
-		int pos = 0;
+		unsigned int pos = 0;
 		OutStream & cout;
 		InStream & cin;
 	public:
@@ -165,7 +165,7 @@ class ConsoleLooper : public ShadowSocksControllerUpdateStatus{
 		void ShowRun(ParamsReader & arg);
 		void Show(ParamsReader & arg);
 
-		inline void MakeExit(ParamsReader & arg) { is_exit = true; }
+		inline void MakeExit(ParamsReader &) { is_exit = true; }
 
 		void Help(ParamsReader & arg);
 
@@ -204,7 +204,7 @@ ConsoleLooper<OutStream, InStream> * makeLooper(OutStream & out, InStream & in) 
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::Help(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::Help(ParamsReader &) {
 	cout << "Supported comands:\n";
 	cout << "\tadd - Add element (Task or Server)\n";
 	cout << "\tcheck - Check condition\n";
@@ -260,7 +260,7 @@ void ConsoleLooper<OutStream, InStream>::Load() {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::VERSION(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::VERSION(ParamsReader &) {
 	cout << "ShadowSocks Console v" << SS_HEAD_VERSION << "-" << SS_VERSION << " (" << SS_VERSION_HASHE << ")\n";
 	cout << "Base on DPLib V" << __DP_LIB_NAMESPACE__::VERSION() << "\n";
 }
@@ -268,7 +268,7 @@ void ConsoleLooper<OutStream, InStream>::VERSION(ParamsReader & arg) {
 
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ServerDisconnect(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ServerDisconnect(ParamsReader &) {
 	throw StructLogout();
 }
 
@@ -622,6 +622,8 @@ void ConsoleLooper<OutStream, InStream>::EditServer(ParamsReader & arg) {
 		}
 	String tx = arg.read("Name", sr->name);
 	if (tx.size() > 1) sr->name = tx;
+	tx = arg.read("Group", sr->group);
+	if (tx.size() > 1) sr->group = tx;
 	tx = arg.read("Host", sr->host);
 	if (tx.size() > 1) sr->host = tx;
 	tx = arg.read("Port", toString(sr->port));
@@ -736,6 +738,8 @@ void ConsoleLooper<OutStream, InStream>::EditTask(ParamsReader & arg) {
 	_Task * tk = _sr->Copy([this](const String & txt) { return txt; });
 	String tx = arg.read("New Name", tk->name);
 	if (tx.size() > 1) tk->name = tx;
+	tx = arg.read("Group", tk->group);
+	if (tx.size() > 1) tk->group = tx;
 	tx = arg.read("Password");
 	if (tx.size() > 1) tk->password = tx;
 	tx = arg.read("Method", tk->method);
@@ -792,13 +796,14 @@ void ConsoleLooper<OutStream, InStream>::GetSource(ParamsReader &) {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	auto & conf = ctrl.getConfig();
 	#define SHOWSETTINGS(NAME, VAL) cout << std::setw(20) << NAME << std::setw(20) << VAL << "\n"
 	SHOWSETTINGS("Name", "Value");
 	cout << "----------------------------\n";
 	SHOWSETTINGS("Enable autostart", conf.autostart);
 	SHOWSETTINGS("ShadowSocks Path", conf.shadowSocksPath);
+	SHOWSETTINGS("ShadowSocksRust Path", conf.shadowSocksPathRust);
 	SHOWSETTINGS("V2Ray Path", conf.v2rayPluginPath);
 	SHOWSETTINGS("Tun2Socks path", conf.tun2socksPath);
 	SHOWSETTINGS("Dns2Socks path", conf.dns2socksPath);
@@ -829,6 +834,10 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 		return;
 	}
 	if (cmd.size() > 1 ) conf.shadowSocksPath = cmd;
+
+	cmd = arg.read("ShadowSocksRust Path", conf.shadowSocksPathRust);
+	if (cmd.size() > 1) conf.shadowSocksPathRust = cmd;
+
 	cmd = arg.read("V2Ray Path", conf.v2rayPluginPath);
 	if (cmd.size() > 1) conf.v2rayPluginPath = cmd;
 	cmd = arg.read("AutoStart", toString(conf.autostart));
@@ -1171,7 +1180,6 @@ void calcSizeAndText(double origin, double & res, String & res_s);
 
 template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::CheckSpeedTest(ParamsReader & arg, bool enable_speed) {
-	const auto & tasks = ctrl.getConfig().tasks;
 	_ShadowSocksController::CheckLoopStruct args = ctrl.makeCheckStruct();
 	args._server_name = "";
 	args._task_name = "";
@@ -1371,7 +1379,7 @@ void ConsoleLooper<OutStream, InStream>::ManualCMD(const String & _cmd) {
 	ParamsReader args = ParamsReader(cout, cin);
 	String c = "";
 	int prev = 0;
-	for (int i = 0; i < cmd.size(); i++) {
+	for (unsigned int i = 0; i < cmd.size(); i++) {
 		if (cmd[i] == ' ' || cmd[i] == '\t' || cmd[i] == '\n') {
 			String t = cmd.substr(prev, i-prev);
 			prev = i+1;
@@ -1491,6 +1499,7 @@ void ConsoleLooper<OutStream, InStream>::AddServer(ParamsReader &arg) {
 	}
 	_Server * sr = new _Server();
 	sr->name = cmd;
+	sr->group = arg.read("Group");
 	sr->host = arg.read("Host");
 
 	cmd = arg.read("Port");
@@ -1548,6 +1557,7 @@ void ConsoleLooper<OutStream, InStream>::AddTask(ParamsReader &arg) {
 
 	_Task * tk = new _Task();
 	tk->name = cmd;
+	tk->group = arg.read("Group");
 	tk->password =arg.read("Password");
 	tk->method = arg.read("Method");
 	String mt = ctrl.getConfig().replaceVariables(tk->method);
@@ -1696,7 +1706,7 @@ void ConsoleLooper<OutStream, InStream>::DeleteTun(ParamsReader & arg) {
 		cout << "Unknow protocol";
 		return;
 	}
-	int lp = arg.readUInt("Local Port");
+	unsigned int lp = arg.readUInt("Local Port");
 	inited = false;
 	for (auto it = _sr->tuns.begin(); it != _sr->tuns.end(); it++)
 		if (it->type == tt && it->localPort == lp) {
@@ -1888,11 +1898,12 @@ void ConsoleLooper<OutStream, InStream>::Save(ParamsReader & arg) {
 #define ec(NAME, VAL) cout << NAME << " \t=\t" << VAL << "\n";
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ListTasks(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ListTasks(ParamsReader &) {
 	const auto & srvs = ctrl.getConfig().tasks;
 	for (const _Task * sr : srvs) {
 		ec("id", sr->id);
 		ec("name", sr->name);
+		ec("group", sr->group);
 		ec("method", sr->method);
 		ec("RunParams", sr->runParamsName)
 		cout << "Servers: ";
@@ -1903,7 +1914,7 @@ void ConsoleLooper<OutStream, InStream>::ListTasks(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ListRun(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ListRun(ParamsReader &) {
 	const auto & srvs = ctrl.getConfig().runParams;
 	for (const _RunParams & sr : srvs) {
 		ec("name", sr.name);
@@ -1933,6 +1944,7 @@ void ConsoleLooper<OutStream, InStream>::ShowTask(ParamsReader & arg) {
 	{
 		ec("id", sr->id);
 		ec("name", sr->name);
+		ec("group", sr->group);
 		ec("method", sr->method);
 		ec("password", sr->password);
 		ec("Enable IPv6", (sr->enable_ipv6 ? "True" : "False"));
@@ -1969,10 +1981,11 @@ void ConsoleLooper<OutStream, InStream>::ShowRun(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ListServers(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ListServers(ParamsReader &) {
 	cout
 		 << std::setw(5) << "ID"
 		 << std::setw(15) << "Name"
+		 << std::setw(15) << "Group"
 		 << std::setw(30) << "Host:Port"
 		 << std::setw(10) << "Plugin"
 		 << std::setw(10) << "Mode"
@@ -1984,6 +1997,7 @@ void ConsoleLooper<OutStream, InStream>::ListServers(ParamsReader & arg) {
 		cout
 			 << std::setw(5) << sr->id
 			 << std::setw(15) << sr->name
+			 << std::setw(15) << sr->group
 			 << std::setw(30) << (sr->host + ":" + sr->port);
 		{
 			const _V2RayServer * srv = dynamic_cast<const _V2RayServer *> (sr);
@@ -2030,6 +2044,7 @@ void ConsoleLooper<OutStream, InStream>::ShowServer(ParamsReader & arg) {
 	cout
 		 << std::setw(5) << "ID"
 		 << std::setw(15) << "Name"
+		 << std::setw(15) << "Group"
 		 << std::setw(30) << "Host:Port"
 		 << std::setw(10) << "Plugin"
 		 << std::setw(10) << "Mode"
@@ -2039,6 +2054,7 @@ void ConsoleLooper<OutStream, InStream>::ShowServer(ParamsReader & arg) {
 		cout
 			 << std::setw(5) << sr->id
 			 << std::setw(15) << sr->name
+			 << std::setw(15) << sr->group
 			 << std::setw(30) << (sr->host + ":" + sr->port);
 		{
 			const _V2RayServer * srv = dynamic_cast<const _V2RayServer *> (sr);
@@ -2073,7 +2089,7 @@ void ConsoleLooper<OutStream, InStream>::ListTun(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ListVPNMode(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ListVPNMode(ParamsReader &) {
 	cout
 		 << std::setw(10) << "Name"
 		 << std::setw(15) << "Tun Name"
@@ -2137,7 +2153,7 @@ void ConsoleLooper<OutStream, InStream>::ShowVPN(ParamsReader & arg) {
 #undef ec
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ListRunning(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ListRunning(ParamsReader &) {
 	auto list = ctrl.getRunning();
 	for (const auto & it : list) {
 		const _Task * task = it.second->getTask();
@@ -2171,7 +2187,7 @@ void ConsoleLooper<OutStream, InStream>::List(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::ListVariables(ParamsReader & arg) {
+void ConsoleLooper<OutStream, InStream>::ListVariables(ParamsReader &) {
 	const auto & cn = ctrl.getConfig().variables;
 	for (const auto & it : cn)
 		cout << it.first << "\t-\t" << it.second << "\n";

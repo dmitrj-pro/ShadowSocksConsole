@@ -27,7 +27,7 @@
 							function doNew() {
 								location.href = "/task/new";
 							}
-							function doCheck() {
+							function doCheckList() {
 								location.href = "/tasks/check";
 							}
 							function doStart(id) {
@@ -39,9 +39,9 @@
 								doExtendetStartButton.setAttribute( "onClick", "" );
 								doCheckButton.setAttribute( "onClick", "" );
 								
-								doStartButton.style="color: red;"
-								doExtendetStartButton.style="color: red;"
-								doCheckButton.style="color: red;"
+								doStartButton.style="margin-right:0.5vw; color: blue;"
+								doExtendetStartButton.style="margin-right:0.5vw; color: blue;"
+								doCheckButton.style="margin-right:0.5vw; color: blue;"
 							
 								fetch("/task/start", {
 									method: "POST",
@@ -63,7 +63,7 @@
 								
 								doStopButton.setAttribute( "onClick", "" + id.toString());
 								
-								doStopButton.style="color: red;"
+								doStopButton.style="margin-right:0.5vw;color: blue;"
 								
 								fetch("/task/stop", {
 									method: "POST",
@@ -74,9 +74,46 @@
 									});
 								});
 							}
+							function GET(key) {
+								var p = window.location.search;
+								p = p.match(new RegExp(key + '=([^&=]+)'));
+								return p ? p[1] : false;
+							}
+							function changeGroupFunc() {
+								var selectBox = document.getElementById("solidSelect");
+								var selectedValue = selectBox.options[selectBox.selectedIndex].value;
+								
+								var link = "tasks.html?group=" + selectedValue.toString();
+								var filter = GET("name");
+								if (filter != false)
+									link = link + "&name=" + filter;
+									
+								location.href = link;
+							}
+							function changeNameFunc() {
+								var selectBox = document.getElementById("solidSelect");
+								var selectedValue = "";
+									if (selectBox.selectedIndex > 0)
+										selectBox.options[selectBox.selectedIndex].value;
+								
+								var link = "tasks.html?name=" + document.getElementById("name").value;
+								if (selectedValue.length > 0)
+									link = link + "&group=" + selectedValue.toString();
+									
+								location.href = link;
+							}
 						</script>
-						<i class="la la-plus" onclick="doNew()"></i>
-						<i class="la la-refresh" onclick="doCheck()"></i>
+						
+						<div class="form-group" style="display: flex">
+							<i class="la la-plus" onclick="doNew()" style="font-size: large; margin:auto"></i>
+							<i class="la la-refresh" onclick="doCheckList()" style="font-size: large; margin:auto"></i>
+							
+							<input type="text" class="form-control" id="name" name="name" placeholder="Enter task name" value="{}" style="max-width: 40%; margin:auto" oninput="changeNameFunc();">
+							<select class="form-control input-solid" id="solidSelect" style="max-width: 40%; margin:auto" onchange="changeGroupFunc();">
+								{}
+							</select>
+						</div>
+						
 						<table class="table table-hover sortable" id="taskTable">
 							<thead>
 								<tr>

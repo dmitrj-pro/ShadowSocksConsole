@@ -14,7 +14,7 @@ Request WebUI::processGetEditSettings(Request req) {
 	if (!ConteinsKey(req->get, "edit"))
 		return HttpServer::generate404(req->method, req->host, req->path);
 
-	List<String> stringParams = List<String> ({"shadowSocksPath", "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
+	List<String> stringParams = List<String> ({"shadowSocksPath", "shadowSocksPathRust", "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
 	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s"});
 
 	String params = req->get["edit"];
@@ -26,6 +26,7 @@ Request WebUI::processGetEditSettings(Request req) {
 		auto & set = ShadowSocksController::Get().getConfig();
 
 		if (params == "shadowSocksPath") { val = set.shadowSocksPath; var = "ShadowSocks Path"; }
+		if (params == "shadowSocksPathRust") { val = set.shadowSocksPathRust; var = "ShadowSocksRust Path"; }
 		if (params == "v2rayPluginPath") { val = set.v2rayPluginPath; var = "V2Ray Path"; }
 		if (params == "tun2socksPath") { val = set.tun2socksPath; var = "Tun2Socks path"; }
 		if (params == "dns2socksPath") { val = set.dns2socksPath; var = "Dns2Socks path"; }
@@ -90,6 +91,20 @@ Request WebUI::processGetEditSettings(Request req) {
 																				"Disable"
 																		  }));
 		}
+		if (params == "defaultShadowSocks") {
+			var = "Default ShadowSocks";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				SSTtypetoString(_RunParams::ShadowSocksType::GO),
+																				set.shadowSocksType == _RunParams::ShadowSocksType::GO ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				SSTtypetoString(_RunParams::ShadowSocksType::GO)
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				SSTtypetoString(_RunParams::ShadowSocksType::Rust),
+																				set.shadowSocksType == _RunParams::ShadowSocksType::Rust ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				SSTtypetoString(_RunParams::ShadowSocksType::Rust)
+																		  }));
+		}
+
 		if (params == "hideDNS2Socks") {
 			var = "Hide DNS2Socks (Windows)";
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
@@ -203,7 +218,7 @@ Request WebUI::processPostEditSettings(Request req) {
 	if (!ConteinsKey(req->post, "value"))
 		return HttpServer::generate404(req->method, req->host, req->path);
 
-	List<String> stringParams = List<String> ({"shadowSocksPath", "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
+	List<String> stringParams = List<String> ({"shadowSocksPath","shadowSocksPathRust" "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
 	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s"});
 
 	String params = req->get["edit"];
@@ -214,6 +229,7 @@ Request WebUI::processPostEditSettings(Request req) {
 		auto & set = ShadowSocksController::Get().getConfig();
 
 		if (params == "shadowSocksPath") { val = &set.shadowSocksPath;}
+		if (params == "shadowSocksPathRust") { val = &set.shadowSocksPathRust;}
 		if (params == "v2rayPluginPath") { val = &set.v2rayPluginPath; }
 		if (params == "tun2socksPath") { val = &set.tun2socksPath; }
 		if (params == "dns2socksPath") { val = &set.dns2socksPath; }
@@ -246,6 +262,10 @@ Request WebUI::processPostEditSettings(Request req) {
 	if (params == "autostart") {
 		auto & set = ShadowSocksController::Get().getConfig();
 		set.autostart = value == "true" ? true : false;
+	}
+	if (params == "defaultShadowSocks") {
+		auto & set = ShadowSocksController::Get().getConfig();
+		set.shadowSocksType = parseSSType(value);
 	}
 	if (params == "enableLogging") {
 		auto & set = ShadowSocksController::Get().getConfig();
@@ -282,7 +302,7 @@ Request WebUI::processPostEditSettings(Request req) {
 	return makeRedirect(req, "/settings.html");
 }
 
-Request WebUI::processGetSettings(Request req) {
+Request WebUI::processGetSettings(Request) {
 	OStrStream out;
 
 	const auto & c = ShadowSocksController::Get().getConfig();
@@ -295,6 +315,16 @@ Request WebUI::processGetSettings(Request req) {
 															"ShadowSocks path",
 															toString(c.shadowSocksPath),
 															"shadowSocksPath"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"ShadowSocksRust path",
+															toString(c.shadowSocksPathRust),
+															"shadowSocksPathRust"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Default ShadowSocks",
+															SSTtypetoString(c.shadowSocksType),
+															"defaultShadowSocks"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Use system wget (Linux)",
@@ -394,7 +424,7 @@ Request WebUI::processGetSettings(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetVariables(Request req) {
+Request WebUI::processGetVariables(Request) {
 	OStrStream out;
 	const auto & vars = ShadowSocksController::Get().getConfig().variables;
 	for (const auto & pair : vars) {
@@ -414,7 +444,7 @@ Request WebUI::processGetVariables(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetAddVariables(Request req) {
+Request WebUI::processGetAddVariables(Request) {
 	String html = makePage("Add variable", "variables/add.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];

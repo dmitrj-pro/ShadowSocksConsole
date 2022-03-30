@@ -26,7 +26,7 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 			resp->headers["Content-Type"] = getMimeType("index.html");
 			return resp;
 		}
-		inline Request makeRedirect(Request req, const String & path = "/") {
+		inline Request makeRedirect(Request, const String & path = "/") {
 			Request r = makeRequest();
 			r->status = 301;
 			//r->headers["Location"] = "http://" + req->host + path;

@@ -15,6 +15,7 @@ class ShadowSocksControllerUpdateStatus{
 	public:
 		virtual void UpdateServerStatus(const String & server, const String & msg) = 0;
 		virtual void UpdateTaskStatus(const String & server, const String & msg) = 0;
+		inline virtual ~ShadowSocksControllerUpdateStatus() {}
 };
 
 class _ShadowSocksController {

@@ -16,7 +16,7 @@ namespace TCPChecker {
 			__DP_LIB_NAMESPACE__::setGlobalDNS(bootstrapDNS);
 		}
 		if (IGNORECHECKSERVER || __DP_LIB_NAMESPACE__::TCPClient::IsCanConnect(host, port)) {
-			if (this->task == nullptr) {
+			if (this->task == nullptr || IGNORECHECKSERVER ) {
 				DP_LOG_INFO << "Server " << host << ":" << port << " is Allow";
 				callback(TCPStatus::Allow, this);
 			} else {

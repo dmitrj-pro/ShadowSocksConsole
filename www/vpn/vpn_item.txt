@@ -5,5 +5,5 @@
 									<td scope="col">{}</td>
 									<td scope="col">{}</td>
 									<td scope="col">{}</td>
-									<td><i class="la la-refresh" onclick="doRefresh('{}')"></i><i class="la la-edit" onclick="doEdit('{}')"></i> <i class="la la-trash" onclick="doDelete('{}')"></i></td>
+									<td scope="col" style="font-size: large"><i class="la la-refresh" onclick="doRefresh('{}')" style="margin-right:0.5vw"></i><i class="la la-edit" onclick="doEdit('{}')" style="margin-right:0.5vw"></i><i class="la la-trash" onclick="doDelete('{}')" style="margin-right:0.5vw"></i></td>
 								</tr>

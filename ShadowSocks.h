@@ -38,11 +38,12 @@ class ShadowSocksClient{
 		_Task * tk;
 		_RunParams run_params;
 		Tun2SocksConfig t2s;
+		_RunParams::ShadowSocksType shadowsocks_type = _RunParams::ShadowSocksType::None;
 
 		String v2rayPlugin = "D:\\tmp\\plugin.exe";
 		String shadowSocks = "D:\\tmp\\demo.exe";
 		String tempPath = "./";
-		String udpTimeout = "1m0s";
+		unsigned int udpTimeout;
 
 		__DP_LIB_NAMESPACE__::Application * _socks = nullptr;
 		__DP_LIB_NAMESPACE__::Thread * _http_server_thread = nullptr;
@@ -97,9 +98,10 @@ class ShadowSocksClient{
 		}
 		static UInt findAllowPort(const String & host);
 		DP_add_setter_name(String, shadowSocks, ShadowSocksPath)
+		DP_add_setter_name(_RunParams::ShadowSocksType, shadowsocks_type, ShadowSocksType)
 		DP_add_setter_name(String, v2rayPlugin, V2RayPluginPath)
 		DP_add_setter_name(String, tempPath, TempPath)
-		DP_add_setter_name(String, udpTimeout, UDPTimeout)
+		DP_add_setter_name(unsigned int, udpTimeout, UDPTimeout)
 		DP_add_getter_name(ShadowSocksClientStatus, status, Status)
 
 };

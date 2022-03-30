@@ -24,10 +24,6 @@
 	#include <windows.h>
 #endif
 
-#ifdef DP_QT_GUI
-	#include <QApplication>
-	#include "ShadowSocksWindow.h"
-#endif
 
 using __DP_LIB_NAMESPACE__::Path;
 using __DP_LIB_NAMESPACE__::Ifstream;
@@ -42,10 +38,6 @@ using __DP_LIB_NAMESPACE__::OStrStream;
 
 class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 	private:
-		#ifdef DP_QT_GUI
-			QApplication * app = nullptr;
-			ShadowSocksWindow * gui = nullptr;
-		#endif
 		bool reopenConsole = true;
 		bool loggingEnabled = false;
 		ShadowSocksServer * service_server;
@@ -104,14 +96,6 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 				serviceMain();
 				return;
 			}
-			#ifdef DP_QT_GUI_0
-				int argc = GetArgc();
-				app = new QApplication(argc, GetArgv());
-				gui = new ShadowSocksWindow();
-				gui->show();
-				app->exec();
-				return;
-			#endif
 			consoleMain();
 		}
 		void _MainExit0(){}
@@ -128,12 +112,6 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			if (!webui.isNull()) {
 				webui->stop();
 			}
-			#ifdef DP_QT_GUI
-				if (app != nullptr) {
-					gui->close();
-					app->quit();
-				}
-			#endif
 				//std::cin
 		}
 
@@ -239,7 +217,6 @@ void ShadowSocksMain::consoleMain() {
 		if (reopenConsole) {
 		if (!AllocConsole()) {
 			DP_LOG_ERROR << "Fail to create console: " <<  __DP_LIB_NAMESPACE__::GetLastErrorAsString() << "\n";
-			//return;
 		} else {
 			freopen("CONIN$", "r", stdin);
 			//freopen("CONOUT$", "w", stderr);
@@ -671,12 +648,25 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const SSClientFlags 
 		res->SetMultiModeServers(srv_ress);
 	}
 
+	_RunParams::ShadowSocksType shadowSockType = this->shadowSocksType;
+	if (run_params.shadowsocks_type != _RunParams::ShadowSocksType::None)
+		shadowSockType = run_params.shadowsocks_type;
+	if (flags.type != _RunParams::ShadowSocksType::None)
+		shadowSockType = flags.type;
+	#ifdef DP_WIN
+	if (!Is64bitWindows() && shadowSockType == _RunParams::ShadowSocksType::Rust) {
+		DP_LOG_ERROR << "shadowsocks-rust is not support for x86 platform (only x86_64/amd64). Force set shadowsocks-go mode";
+		shadowSockType = _RunParams::ShadowSocksType::GO;
+	}
+	#endif
+
 
 	// Устанавливаем глобальные настройки запуска
-	res->SetShadowSocksPath(this->replacePath(this->shadowSocksPath));
+	res->SetShadowSocksPath(this->replacePath(shadowSockType == _RunParams::ShadowSocksType::GO ? this->shadowSocksPath : this->shadowSocksPathRust));
+	res->SetShadowSocksType(shadowSockType);
 	res->SetV2RayPluginPath(this->replacePath(this->v2rayPluginPath));
 	res->SetTempPath(this->replacePath(this->tempPath, true));
-	res->SetUDPTimeout(convertTime(this->udpTimeout));
+	res->SetUDPTimeout(this->udpTimeout);
 	Tun2Socks::SetT2SPath(this->replacePath(this->tun2socksPath));
 	Tun2Socks::SetD2SPath(this->replacePath(this->dns2socksPath));
 
@@ -704,7 +694,10 @@ bool _ShadowSocksController::CheckInstall() {
 	DP_LOG_DPDEBUG << "Checking install\n";
 	DP_LOG_DPDEBUG << "Check SS\n";
 	__DP_LIB_NAMESPACE__::Path p(settings.replacePath(settings.shadowSocksPath));
-	if (!p.IsFile())
+	bool shadowSocks = p.IsFile();
+	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.shadowSocksPathRust));
+	shadowSocks = shadowSocks || p.IsFile();
+	if (!shadowSocks)
 		return false;
 	DP_LOG_DPDEBUG << "Check V2Ray\n";
 	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.v2rayPluginPath));
@@ -777,6 +770,7 @@ String ShadowSocksSettings::GetSource() {
 		String key = "Servers." + toString(sr->id) + ".";
 		SetType(key + "port", sr->port);
 		Set(key + "name", sr->name);
+		Set(key + "group", sr->group);
 		Set(key + "host", sr->host);
 		{
 			_V2RayServer * srv = dynamic_cast<_V2RayServer *>(sr);
@@ -809,6 +803,7 @@ String ShadowSocksSettings::GetSource() {
 	for (_Task * tk : tasks) {
 		String key = "Tasks." + toString(tk->id) + ".";
 		Set(key + "name", tk->name);
+		Set(key + "group", tk->group);
 		Set(key + "password", tk->password);
 		Set(key + "method", tk->method);
 		SetType(key + "autostart", tk->autostart);
@@ -839,6 +834,7 @@ String ShadowSocksSettings::GetSource() {
 		SetType(key + "localport", tk.localPort);
 		Set(key + "localhost", tk.localHost);
 		Set(key + "VPN", tk.tun2SocksName);
+		Set(key + "defaultShadowSocks", SSTtypetoString(tk.shadowsocks_type));
 		SetType(key + "httpport", tk.httpProxy);
 		SetType(key + "SystemProxy", tk.systemProxy);
 		SetType(key + "multimode", tk.multimode);
@@ -848,6 +844,8 @@ String ShadowSocksSettings::GetSource() {
 		String key = "System.Settings.";
 		SetType(key + "autostart", this->autostart);
 		Set(key + "ShadowSocksPath", this->shadowSocksPath);
+		Set(key + "ShadowSocksPathRust", this->shadowSocksPathRust);
+		Set(key + "ShadowSocksType", SSTtypetoString(this->shadowSocksType));
 		Set(key + "V2RayPath", this->v2rayPluginPath);
 		Set(key + "Tun2Socks", this->tun2socksPath);
 		Set(key + "Dns2Socks", this->dns2socksPath);
@@ -917,6 +915,7 @@ void ShadowSocksSettings::Load(const String & text, bool force) {
 		Read(key + "port", sr->port);
 		Read(key + "host", sr->host);
 		ReadN(key + "name", sr->name);
+		ReadN(key + "group", sr->group);
 		servers.push_back(sr);
 	}
 
@@ -953,7 +952,8 @@ void ShadowSocksSettings::Load(const String & text, bool force) {
 		_Task * tk = new _Task(__DP_LIB_NAMESPACE__::parse<int>(id));
 		if (tk->id >= _Task::glob_id)
 			_Task::glob_id = tk->id + 1;
-		ReadN(key + "name", tk->name);
+		Read(key + "name", tk->name);
+		ReadN(key + "group", tk->group);
 		Read(key + "password", tk->password);
 		Read(key + "method", tk->method);
 		ReadNType(key + "autostart", tk->autostart, bool);
@@ -995,6 +995,9 @@ void ShadowSocksSettings::Load(const String & text, bool force) {
 		ReadType(key + "localport", tk.localPort, int);
 		Read(key + "localhost", tk.localHost);
 		ReadN(key + "VPN", tk.tun2SocksName);
+		String tm = SSTtypetoString(_RunParams::ShadowSocksType::None);
+		ReadN(key + "defaultShadowSocks", tm);
+		tk.shadowsocks_type = parseSSType(tm);
 		ReadNType(key + "httpport", tk.httpProxy, int);
 		ReadNType(key + "SystemProxy", tk.systemProxy, bool);
 		ReadNType(key + "multimode", tk.multimode, bool);
@@ -1025,6 +1028,13 @@ void ShadowSocksSettings::Load(const String & text, bool force) {
 		String key = "System.Settings.";
 		ReadNType(key + "autostart", this->autostart, bool);
 		ReadN(key + "ShadowSocksPath", this->shadowSocksPath);
+		ReadN(key + "ShadowSocksPathRust", this->shadowSocksPathRust);
+		{
+			String t = "go";
+			ReadN(key + "ShadowSocksType", t);
+			this->shadowSocksType = parseSSType(t);
+		}
+
 		ReadN(key + "V2RayPath", this->v2rayPluginPath);
 		ReadN(key + "Tun2Socks", this->tun2socksPath);
 		ReadN(key + "Dns2Socks", this->dns2socksPath);
@@ -1071,4 +1081,4 @@ void ShadowSocksSettings::Load(const String & text, bool force) {
 	}
 }
 
-DP_ADD_MAIN_FUNCTION(new ShadowSocksMain())
+DP_ADD_MAIN_FUNCTION_WITH_NETWORK(new ShadowSocksMain())

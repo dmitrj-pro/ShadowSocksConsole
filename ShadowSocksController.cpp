@@ -131,13 +131,21 @@ ShadowSocksClient * _ShadowSocksController::StartById(int id, OnShadowSocksRunne
 	DP_PRINT_VAL_0(flags.sysproxy_s);
 	DP_PRINT_VAL_0(flags.deepCheck);
 	DP_PRINT_VAL_0(flags.multimode);
+	DP_PRINT_VAL_0(SSTtypetoString(flags.type));
 
 	ShadowSocksClient * shad = settings.makeServer(id, flags);
-	shad->SetOnCrash(onCrash);
-	shad -> Start(flags, onSuccess);
-	DP_PRINT_TEXT("Task #" + toString(id) + "started");
 	clients_lock.lock();
-	clients.push_back(__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient * >(id, shad));
+	try {
+		shad->SetOnCrash(onCrash);
+		shad -> Start(flags, onSuccess);
+		DP_PRINT_TEXT("Task #" + toString(id) + "started");
+
+		clients.push_back(__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient * >(id, shad));
+	} catch (...) {
+		clients_lock.unlock();
+		throw;
+	}
+
 	clients_lock.unlock();
 	return shad;
 }
@@ -146,6 +154,7 @@ ShadowSocksClient * _ShadowSocksController::StartByName(const String & name, OnS
 	for (const _Task * tk : settings.tasks)
 		if (tk->name == name)
 			return StartById(tk->id, onSuccess, onCrash, flags);
+	return nullptr;
 }
 
 bool _ShadowSocksController::isRunning(int id) {
@@ -178,6 +187,8 @@ void _ShadowSocksController::StopByName(const String & name){
 }
 
 void _ShadowSocksController::StopByClient(ShadowSocksClient * client) {
+	if (client == nullptr)
+		return;
 	DP_LOG_DEBUG << "Try stop task" << client->getTask()->name;
 	clients_lock.lock();
 	for (auto it = clients.begin(); it != clients.end(); it++) {
@@ -269,87 +280,93 @@ void _ShadowSocksController::ExportConfig(__DP_LIB_NAMESPACE__::Ostream & out, b
 	out << "\t[\n";
 	int num = 0;
 	ShadowSocksSettings & config = getConfig();
+	Map<String, List<_Task * >> sortedByGroups;
 	for (_Task * t: config.tasks) {
-		num += 1;
-		int srv_num = 0;
-		for (int id : t->servers_id) {
-			srv_num ++;
-			for (_Server * sr : config.servers)
-				if (sr->id == id) {
-					if (config.bootstrapDNS.size() > 4)
-						__DP_LIB_NAMESPACE__::setGlobalDNS(config.bootstrapDNS);
+		sortedByGroups[t->group].push_back(t);
+	}
+	for (auto & pair_list : sortedByGroups) {
+		for (_Task * t: pair_list.second) {
+			num += 1;
+			int srv_num = 0;
+			for (int id : t->servers_id) {
+				srv_num ++;
+				for (_Server * sr : config.servers)
+					if (sr->id == id) {
+						if (config.bootstrapDNS.size() > 4)
+							__DP_LIB_NAMESPACE__::setGlobalDNS(config.bootstrapDNS);
 
-					String _host = config.replaceVariables(sr->host);
-					__DP_LIB_NAMESPACE__::List<String> ip_addrs;
-					if (resolve_dns)
-						ip_addrs = __DP_LIB_NAMESPACE__::resolveDomainList(_host);
-					else
-						ip_addrs.push_back(_host);
+						String _host = config.replaceVariables(sr->host);
+						__DP_LIB_NAMESPACE__::List<String> ip_addrs;
+						if (resolve_dns)
+							ip_addrs = __DP_LIB_NAMESPACE__::resolveDomainList(_host);
+						else
+							ip_addrs.push_back(_host);
 
-					int i = -1;
-					for (const String & ip : ip_addrs) {
-						i++;
-						out << "\t{\n";
-						out << "\t\t\"server\": \"" << ip << "\",\n";
-						out << "\t\t\"server_port\": " << config.replaceVariables(sr->port) << ",\n";
-						out << "\t\t\"password\": \"" << config.replaceVariables(t->password) << "\",\n";
-						out << "\t\t\"method\": \"";
+						int i = -1;
+						for (const String & ip : ip_addrs) {
+							i++;
+							out << "\t{\n";
+							out << "\t\t\"server\": \"" << ip << "\",\n";
+							out << "\t\t\"server_port\": " << config.replaceVariables(sr->port) << ",\n";
+							out << "\t\t\"password\": \"" << config.replaceVariables(t->password) << "\",\n";
+							out << "\t\t\"method\": \"";
 
-						String mt = config.replaceVariables(t->method);
-						if (mt == "AEAD_CHACHA20_POLY1305")
-							out << "chacha20-ietf-poly1305";
-						if (mt == "AEAD_AES_256_GCM")
-							out << "aes-256-gcm";
-						if (mt == "AEAD_AES_128_GCM")
-							out << "aes-128-gcm";
-						out << "\",\n";
-						_V2RayServer * srv = dynamic_cast<_V2RayServer *> (sr);
-						out << "\t\t\"plugin\": \"";
-						if (srv != nullptr) {
-							out << v2ray_path;
-						}
-						out << "\",\n";
-						out << "\t\t\"plugin_opts\": \"";
-						if (srv != nullptr) {
-							if (srv->isTLS)
-								out << "tls;";
-							out << "mode=" << config.replaceVariables(srv->mode) << ";host=" << config.replaceVariables(srv->v2host) << ";path=" << config.replaceVariables(srv->path);
-						}
-						out << "\",\n";
-						if (!is_mobile) {
-							out << "\t\t\"plugin_args\": \"\",\n";
-							out << "\t\t\"timeout\": " << 10 << ",\n";
-						}
-						out << "\t\t\"remarks\": \"" << sr->name << (ip_addrs.size() > 1 ? "_" + toString(i) : "") << "\"" << (is_mobile ? "," : "") << "\n";
-						if (is_mobile) {
-							String _dns = default_dns;
-							_RunParams p = config.findRunParamsbyName(t->runParamsName);
-							if (p.tun2SocksName.size() > 1) {
-								const Tun2SocksConfig tun = config.findVPNbyName(p.tun2SocksName);
-								if (tun.dns.size() > 0)
-									_dns = *(tun.dns.begin());
-
+							String mt = config.replaceVariables(t->method);
+							if (mt == "AEAD_CHACHA20_POLY1305")
+								out << "chacha20-ietf-poly1305";
+							if (mt == "AEAD_AES_256_GCM")
+								out << "aes-256-gcm";
+							if (mt == "AEAD_AES_128_GCM")
+								out << "aes-128-gcm";
+							out << "\",\n";
+							_V2RayServer * srv = dynamic_cast<_V2RayServer *> (sr);
+							out << "\t\t\"plugin\": \"";
+							if (srv != nullptr) {
+								out << v2ray_path;
 							}
+							out << "\",\n";
+							out << "\t\t\"plugin_opts\": \"";
+							if (srv != nullptr) {
+								if (srv->isTLS)
+									out << "tls;";
+								out << "mode=" << config.replaceVariables(srv->mode) << ";host=" << config.replaceVariables(srv->v2host) << ";path=" << config.replaceVariables(srv->path);
+							}
+							out << "\",\n";
+							if (!is_mobile) {
+								out << "\t\t\"plugin_args\": \"\",\n";
+								out << "\t\t\"timeout\": " << 10 << ",\n";
+							}
+							out << "\t\t\"remarks\": \"" << sr->name << (ip_addrs.size() > 1 ? "_" + toString(i) : "") << "\"" << (is_mobile ? "," : "") << "\n";
+							if (is_mobile) {
+								String _dns = default_dns;
+								_RunParams p = config.findRunParamsbyName(t->runParamsName);
+								if (p.tun2SocksName.size() > 1) {
+									const Tun2SocksConfig tun = config.findVPNbyName(p.tun2SocksName);
+									if (tun.dns.size() > 0)
+										_dns = *(tun.dns.begin());
 
-							out << "\t\t\"route\": \"all\",\n";
-							out << "\t\t\"remote_dns\": \"" << _dns << "\",\n";
-							out << "\t\t\"ipv6\": " << (t->enable_ipv6 ? "true" : "false") << ",\n";
-							out << "\t\t\"metered\": false,\n";
-							out << "\t\t\"proxy_apps\": {\n";
-							out << "\t\t\t\"enabled\": false\n";
-							out << "\t\t},\n";
-							out << "\t\t\"udpdns\": false\n";
+								}
+
+								out << "\t\t\"route\": \"all\",\n";
+								out << "\t\t\"remote_dns\": \"" << _dns << "\",\n";
+								out << "\t\t\"ipv6\": " << (t->enable_ipv6 ? "true" : "false") << ",\n";
+								out << "\t\t\"metered\": false,\n";
+								out << "\t\t\"proxy_apps\": {\n";
+								out << "\t\t\t\"enabled\": false\n";
+								out << "\t\t},\n";
+								out << "\t\t\"udpdns\": false\n";
+							}
+							out << "\t}";
+							if (!((config.tasks.size() == num) && (srv_num == t->servers_id.size()) && (i == (ip_addrs.size() - 1)) ) ) {
+								out <<",\n";
+							} else {
+								out << "\n";
+							}
 						}
-						out << "\t}";
-						if (!((config.tasks.size() == num) && (srv_num == t->servers_id.size()) && (i == (ip_addrs.size() - 1)) ) ) {
-							out <<",\n";
-						} else {
-							out << "\n";
-						}
+
+
 					}
-
-
-				}
+			}
 		}
 	}
 	out << "\t]";
@@ -406,15 +423,6 @@ void _ShadowSocksController::ExportConfig(__DP_LIB_NAMESPACE__::Ostream & out, b
 
 void calcSizeAndText(double origin, double & res, String & res_s);
 
-unsigned long fileSize(const String & file) {
-   __DP_LIB_NAMESPACE__::Ifstream in;
-   in.open(file, std::ios::ate | std::ios::binary);
-   if (in.fail()) {
-	   return 0;
-   }
-   return in.tellg();
-}
-
 _ShadowSocksController::CheckLoopStruct _ShadowSocksController::makeCheckStruct() const {
 	CheckLoopStruct args;
 	args.auto_check_interval_s = settings.auto_check_interval_s;
@@ -434,6 +442,8 @@ _ShadowSocksController::CheckLoopStruct _ShadowSocksController::makeCheckStruct(
 
 void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 				  const CheckLoopStruct & args) {
+	if (srv == nullptr || task == nullptr)
+		return;
 	for (const auto & cl : clients) {
 		if (cl.second->getTask()->name == task->name) {
 			DP_LOG_DEBUG << "Task " << task->name << " already running. Ignore";
@@ -485,7 +495,7 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 			return;
 		}
 		auto t2 = std::chrono::high_resolution_clock::now();
-		unsigned long filesize = fileSize(p.Get());
+		unsigned long filesize = __DP_LIB_NAMESPACE__::fileSize(p.Get());
 		__DP_LIB_NAMESPACE__::RemoveFile(p.Get());
 
 		auto time_s = std::chrono::duration_cast<std::chrono::seconds> (t2 - t1).count();

@@ -35,7 +35,7 @@ inline std::string findCode(const std::string & file) {
 }
 
 
-inline char * findResource(const std::string & file, unsigned long & size) {
+inline char * findResource(const std::string & file, unsigned long long & size) {
 	Path this_file = Path("${path_to_file}");
 	this_file = Path(this_file.GetFolder());
 	this_file.Append(file);

@@ -24,8 +24,43 @@
 							function doNew() {
 								location.href = "/server/new";
 							}
+							function GET(key) {
+								var p = window.location.search;
+								p = p.match(new RegExp(key + '=([^&=]+)'));
+								return p ? p[1] : false;
+							}
+							function changeGroupFunc() {
+								var selectBox = document.getElementById("solidSelect");
+								var selectedValue = selectBox.options[selectBox.selectedIndex].value;
+								
+								var link = "servers.html?group=" + selectedValue.toString();
+								var filter = GET("name");
+								if (filter != false)
+									link = link + "&name=" + filter;
+									
+								location.href = link;
+							}
+							function changeNameFunc() {
+								var selectBox = document.getElementById("solidSelect");
+								var selectedValue = "";
+									if (selectBox.selectedIndex > 0)
+										selectBox.options[selectBox.selectedIndex].value;
+								
+								var link = "servers.html?name=" + document.getElementById("name").value;
+								if (selectedValue.length > 0)
+									link = link + "&group=" + selectedValue.toString();
+									
+								location.href = link;
+							}
 						</script>
-						<i class="la la-plus" onclick="doNew()"></i>
+						<div class="form-group" style="display: flex">
+							<i class="la la-plus" onclick="doNew()" style="font-size: large; margin:auto"></i>
+							
+							<input type="text" class="form-control" id="name" name="name" placeholder="Enter server name" value="{}" style="max-width: 40%; margin:auto" oninput="changeNameFunc();">
+							<select class="form-control input-solid" id="solidSelect" style="max-width: 40%; margin:auto" onchange="changeGroupFunc();">
+								{}
+							</select>
+						</div>
 						<table class="table table-hover sortable">
 							<thead>
 								<tr>

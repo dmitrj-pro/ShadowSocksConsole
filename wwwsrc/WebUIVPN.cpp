@@ -15,7 +15,7 @@ using __DP_LIB_NAMESPACE__::ConteinsKey;
 using __DP_LIB_NAMESPACE__::parse;
 using __DP_LIB_NAMESPACE__::trim;
 
-Request WebUI::processGetVPN(Request req) {
+Request WebUI::processGetVPN(Request) {
 	OStrStream out;
 	const auto & tuns = ShadowSocksController::Get().getConfig().tun2socksConf;
 	for (auto t : tuns) {
@@ -185,7 +185,7 @@ Request WebUI::processPostVPNEditPage(Request req){
 	return makeRedirect(req, "/vpn.html");
 }
 
-Request WebUI::processGetNewVPNPage(Request req){
+Request WebUI::processGetNewVPNPage(Request){
 	String html = makePage("New VPN", "vpn/new.txt", List<String>({
 															Tun2Socks::DetectInterfaceName(),
 															Tun2Socks::DetectDefaultRoute()
