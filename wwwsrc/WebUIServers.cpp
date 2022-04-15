@@ -19,6 +19,9 @@ Request WebUI::processGetServers(Request req) {
 	String filter_name = "";
 	if (ConteinsKey(req->get, "name"))
 		filter_name = req->get["name"];
+    if (ConteinsKey(req->cookie, "s_group") && filter_group.size() == 0)
+        return makeRedirect(req, "/servers.html?group=" + req->cookie["s_group"] + (filter_name.size() == 0 ? "" : "&name=" + filter_name));
+
 	SmartParser filter_name_parser{"*" + filter_name + "*"};
 
 	OStrStream out;
@@ -101,6 +104,8 @@ Request WebUI::processGetServers(Request req) {
 
 	String html = makePage("Servers", "servers/servers_index.txt", List<String>( { filter_name, group_gen.str(), out.str()}));
 	Request resp = makeRequest();
+    if (filter_group.size() != 0)
+        resp->cookie["s_group"] = filter_group;
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
 	resp->body_length = html.size();

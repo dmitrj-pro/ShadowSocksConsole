@@ -321,7 +321,7 @@ struct ShadowSocksSettings{
 	String GetSource();
 	String GetSourceCashe();
 	void LoadCashe(const String & text);
-	void Load(const String & text, bool force);
+	void Load(const String & text);
 
 	ShadowSocksClient * makeServer(int id, const SSClientFlags & flags);
 };

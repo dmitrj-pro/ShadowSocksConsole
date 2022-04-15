@@ -168,10 +168,23 @@ void _ShadowSocksController::StopByName(const String & name){
 	DP_LOG_DEBUG << "Try stop task" << name;
 	clients_lock.lock();
 	for (auto it = clients.begin(); it != clients.end(); it++) {
+        if (it->second->getTask() == nullptr) {
+            DP_LOG_DEBUG << "Found crashed task. Close it";
+            clients.erase(it);
+            clients_lock.unlock();
+            StopByName(name);
+            return;
+        }
 		if (it->second->getTask()->name == name) {
 			if (it->second->GetStatus() == ShadowSocksClientStatus::DoStop || it->second->GetStatus() == ShadowSocksClientStatus::Stoped) {
-				clients_lock.unlock();
-				throw EXCEPTION("Task will be stop automatical");
+                DP_LOG_DEBUG << "Task " << name << " will be stop automatical";
+                bool need_delete = it->second->GetStatus() == ShadowSocksClientStatus::Stoped;
+                ShadowSocksClient * client = it->second;
+                clients.erase(it);
+                clients_lock.unlock();
+                if (need_delete)
+                    delete client;
+                return;
 			}
 			DP_LOG_DEBUG << "Stop process for " << name;
 			ShadowSocksClient * client = it->second;
@@ -192,10 +205,23 @@ void _ShadowSocksController::StopByClient(ShadowSocksClient * client) {
 	DP_LOG_DEBUG << "Try stop task" << client->getTask()->name;
 	clients_lock.lock();
 	for (auto it = clients.begin(); it != clients.end(); it++) {
+        if (it->second->getTask() == nullptr) {
+            DP_LOG_DEBUG << "Found crashed task. Close it";
+            clients.erase(it);
+            clients_lock.unlock();
+            StopByClient(client);
+            return;
+        }
 		if (it->second == client) {
 			if (it->second->GetStatus() == ShadowSocksClientStatus::DoStop || it->second->GetStatus() == ShadowSocksClientStatus::Stoped) {
-				clients_lock.unlock();
-				throw EXCEPTION("Task will be stop automatical");
+                DP_LOG_DEBUG << "Task " << client->getTask()->name << " will be stop automatical";
+                bool need_delete = it->second->GetStatus() == ShadowSocksClientStatus::Stoped;
+                ShadowSocksClient * cl = it->second;
+                clients.erase(it);
+                clients_lock.unlock();
+                if (need_delete)
+                    delete cl;
+                return;
 			}
 			DP_LOG_DEBUG << "Stop process for " << client->getTask()->name;
 			clients.erase(it);
@@ -211,10 +237,10 @@ void _ShadowSocksController::StopByClient(ShadowSocksClient * client) {
 void _ShadowSocksController::OpenConfig(const String & password) {
 	if (settings.tasks.size() > 0) {
 		ShadowSocksSettings tmp;
-		tmp.Load(GetSourceConfig(password), force_open_config);
+		tmp.Load(GetSourceConfig(password));
 	} else {
 		settings = ShadowSocksSettings();
-		settings.Load(GetSourceConfig(password), force_open_config);
+		settings.Load(GetSourceConfig(password));
 		this->password = password;
 	}
 }

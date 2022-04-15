@@ -122,13 +122,6 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			ShadowSocksController::Get().DisableAutoStart();
 		}
 		inline void disableReopenConsole() { reopenConsole = false; }
-		inline void setPassword(const String & password) {
-			try{
-				ShadowSocksController::Get().OpenConfig(password);
-			} catch (__DP_LIB_NAMESPACE__::LineException e) {
-				DP_LOG_WARNING << "Fail set password:" << e.toString() << "\n";
-			}
-		}
 		inline void onFailArg() {
 
 		}
@@ -182,24 +175,19 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
 			loggingEnabled = true;
 		}
-		inline void ForceReadConfig() {
-			ShadowSocksController::Get().setForceReadConfigMode();
-		}
 
 		virtual void PreStart() override {
 			readHostData();
 			srand(time(nullptr));
 			ShadowSocksController::Create(new _ShadowSocksController());
-			DP_SM_addArgumentHelp0(&ShadowSocksMain::autoStart, "Auto start tasks", "start", "-e", "--e", "-start", "--start");
+			DP_SM_addArgumentHelp0(&ShadowSocksMain::autoStart, "Auto start tasks", "-e", "--e");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::disableStart, "Run without autostart", "savemode", "-s", "--s", "-savemode", "--savemode");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::disableReopenConsole, "Run without start new console (Windows only)", "noconsole", "-noconsole", "--noconsole");
-			DP_SM_addArgumentHelp1(String, &ShadowSocksMain::setPassword, &ShadowSocksMain::onFailArg, "Set password for decrypt config", "-p", "--p", "-password", "--password");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::install, "Install as service", "install");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::uninstall, "Uninstall service", "uninstall");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::start, "Start service", "start");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::stop, "Stop service", "stop");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::asservice, "start as service", "sexecute");
-			DP_SM_addArgumentHelp0(&ShadowSocksMain::ForceReadConfig, "Disable check checksum in config", "no-check-hashe");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::version, "Show application version", "version");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::writeHostData, "Write file with default service host:port", "write-ports");
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::enableLogging, "Enable logging", "log");
@@ -887,7 +875,7 @@ String ShadowSocksSettings::GetSource() {
 	return _out.str();
 }
 
-void ShadowSocksSettings::Load(const String & text, bool force) {
+void ShadowSocksSettings::Load(const String & text) {
 	__DP_LIB_NAMESPACE__::IStrStream in;
 	in.str(text);
 
@@ -1064,10 +1052,10 @@ void ShadowSocksSettings::Load(const String & text, bool force) {
 		ReadN("Core.Crypt.Hash2", hash);
 
 		if (checksum.isFail())
-			if (hash != "c950ec0ba1ebbf212b155d39d000d2fbb46eafe4" && !force)
+			if (hash != "c950ec0ba1ebbf212b155d39d000d2fbb46eafe4")
 				throw EXCEPTION("Bad password");
 		String r = checksum.final();
-		if (r != hash && !force)
+		if (r != hash)
 			throw EXCEPTION("Bad password");
 	}
 

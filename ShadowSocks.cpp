@@ -281,6 +281,8 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 }
 
 void ShadowSocksClient::onCrash(const ExitStatus & status) {
+    if (tk == nullptr)
+        return;
 	_locker.lock();
 	if (_is_exit) {
 		_locker.unlock();
@@ -293,9 +295,10 @@ void ShadowSocksClient::onCrash(const ExitStatus & status) {
 		_socks->SetOnCloseFunc(nullptr);
 	_locker.unlock();
 
-	Stop();
+    String name = tk->name;
+    Stop(false);
 	if (_onCrash != nullptr)
-		_onCrash(tk->name, status);
+        _onCrash(name, status);
 }
 
 extern "C" int setNoProxy();
@@ -333,6 +336,8 @@ void ShadowSocksClient::SetSystemProxy() {
 }
 
 void ShadowSocksClient::_Stop() {
+    if (status == ShadowSocksClientStatus::DoStop || status == ShadowSocksClientStatus::Stoped)
+        return;
 	status = ShadowSocksClientStatus::DoStop;
 	_is_exit = true;
 	if (tun2socks != nullptr) {
@@ -341,7 +346,7 @@ void ShadowSocksClient::_Stop() {
 		tun2socks = nullptr;
 	}
 	if (_socks != nullptr) {
-		_socks->KillNoJoin();
+        _socks->Kill();
 		delete _socks;
 		_socks = nullptr;
 	}

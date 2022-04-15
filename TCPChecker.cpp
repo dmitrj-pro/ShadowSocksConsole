@@ -11,13 +11,13 @@ using __DP_LIB_NAMESPACE__::UInt;
 
 namespace TCPChecker {
 	void TCPCheckerWorker::Check() {
-		DP_LOG_INFO << "Start check server " << host << ":" << port << "\n";
+        DP_LOG_DEBUG << "Start check server " << host << ":" << port << "\n";
 		if (bootstrapDNS.size() > 4) {
 			__DP_LIB_NAMESPACE__::setGlobalDNS(bootstrapDNS);
 		}
 		if (IGNORECHECKSERVER || __DP_LIB_NAMESPACE__::TCPClient::IsCanConnect(host, port)) {
 			if (this->task == nullptr || IGNORECHECKSERVER ) {
-				DP_LOG_INFO << "Server " << host << ":" << port << " is Allow";
+                DP_LOG_DEBUG << "Server " << host << ":" << port << " is Allow";
 				callback(TCPStatus::Allow, this);
 			} else {
 				auto & ctrl = ShadowSocksController::Get();
@@ -28,15 +28,15 @@ namespace TCPChecker {
 				if (ctrl.getConfig().auto_check_mode !=  ShadowSocksSettings::AutoCheckingMode::Off)
 					ctrl.SaveCashe();
 				if (srv->check_result.isRun) {
-					DP_LOG_INFO << "Deep check Server " << host << ":" << port << " is Allow";
+                    DP_LOG_DEBUG << "Deep check Server " << host << ":" << port << " is Allow";
 					callback(TCPStatus::Allow, this);
 				} else {
-					DP_LOG_INFO << "Deep check Server " << host << ":" << port << " is Down";
+                    DP_LOG_DEBUG << "Deep check Server " << host << ":" << port << " is Down";
 					callback(TCPStatus::Disallow, this);
 				}
 			}
 		} else {
-			DP_LOG_INFO << "Server " << host << ":" << port << " is Down";
+            DP_LOG_DEBUG << "Server " << host << ":" << port << " is Down";
 			callback(TCPStatus::Disallow, this);
 		}
 	}

@@ -5,6 +5,7 @@
 #include <mutex>
 #include <algorithm>
 #include <Log/Log.h>
+#include <Network/Utils.h>
 
 using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -419,7 +420,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 		Application & t = *tun2socks;
 		if (config.hideDNS2Socks)
 			t << "/q";
-		String tmtp = proxyServer + ":";
+        String tmtp = __DP_LIB_NAMESPACE__::resolveDomain(proxyServer) + ":";
 		tmtp = tmtp + toString(proxyPort);
 		t << tmtp << (*this->config.dns.begin()) << "127.0.0.1:53";
 		t.SetOnCloseFunc([this, _onCrash]() {

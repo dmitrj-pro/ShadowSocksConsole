@@ -25,7 +25,6 @@ class _ShadowSocksController {
 		List<__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient *> > clients;
 		std::mutex clients_lock;
 		std::function<void()> _make_exit;
-		bool force_open_config = false;
 		// 0 - Unknow
 		// 1 - AutoStart
 		// 2 - Disable AutoStart
@@ -79,7 +78,6 @@ class _ShadowSocksController {
 		void StopByClient(ShadowSocksClient * client);
 		bool isRunning(int id);
 		bool CheckInstall();
-		inline void setForceReadConfigMode() { force_open_config = true; }
 
 		struct CheckLoopStruct{
 			unsigned int auto_check_interval_s = 60;

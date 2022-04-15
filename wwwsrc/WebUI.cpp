@@ -235,7 +235,7 @@ Request WebUI::processPostLogin(Request req) {
 	cookies_lock.lock();
 	cookies.push_back(s);
 	cookies_lock.unlock();
-	DP_LOG_INFO << "Authenticated new user " << cookie;
+    DP_LOG_DEBUG << "Authenticated new user " << cookie;
 	Request resp = makeRedirect(req, "/");
 	resp->cookie["auth"] = cookie;
 

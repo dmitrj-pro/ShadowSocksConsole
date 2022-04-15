@@ -332,43 +332,45 @@ void Generator::zipOutput(unsigned int base_path_size, const List<String> & bin_
 
 	Ofstream out;
 	out.open(output);
-	out << "#define INIT_ZIP_HEADER ZipReader ZipReader::reader{};\n" << findCode("zip_file.hpp");
+	out << "#define INIT_ZIP_HEADER WWW_GENERATOR_ZIP_READED::ZipReader WWW_GENERATOR_ZIP_READED::ZipReader::reader{};\n" << findCode("zip_file.hpp");
 	out << R"""(
-		   class ZipReader{
-			   private:
-				   __DP_WWW_GENERATOR_ZIP_FILE_HPP__::miniz_cpp_RANDOM_NAMESPACE_020220221214::zip_file * zip;
-				   static ZipReader reader;
+			namespace WWW_GENERATOR_ZIP_READED {
+				class ZipReader{
+				   private:
+					   __DP_WWW_GENERATOR_ZIP_FILE_HPP__::miniz_cpp_RANDOM_NAMESPACE_020220221214::zip_file * zip;
+					   static ZipReader reader;
 
-			   public:
-				   static inline ZipReader & Get() { return reader; }
-				   ZipReader(){
-						zip = new __DP_WWW_GENERATOR_ZIP_FILE_HPP__::miniz_cpp_RANDOM_NAMESPACE_020220221214::zip_file(
-								std::vector<unsigned char>{
-									)""";
-	unsigned long long i = 0;
-	for (unsigned char c : zipped) {
-		out << (i == 0 ? "" : ", ") << (enable_cast ? "(unsigned char)" : "") <<  "0x" << ByteToHex(c/16) << ByteToHex(c%16);
-		i++;
-	}
+				   public:
+					   static inline ZipReader & Get() { return reader; }
+					   ZipReader(){
+							zip = new __DP_WWW_GENERATOR_ZIP_FILE_HPP__::miniz_cpp_RANDOM_NAMESPACE_020220221214::zip_file(
+									std::vector<unsigned char>{
+										)""";
+		unsigned long long i = 0;
+		for (unsigned char c : zipped) {
+			out << (i == 0 ? "" : ", ") << (enable_cast ? "(unsigned char)" : "") <<  "0x" << ByteToHex(c/16) << ByteToHex(c%16);
+			i++;
+		}
 
-out << R"""(								}
-							);
+	out << R"""(								}
+								);
 
-				   }
+					   }
 
-				   inline std::list<std::string> fileList() { return zip->namelist(); }
-				   inline bool hasFile(const std::string & filename) { return zip->has_file(filename); }
-				   inline std::string getAsText(const std::string & filename) { return zip->read(filename); }
-				   inline char * getAsBin(const std::string & filename, unsigned long long & size) { std::size_t t; char * r = zip->read(filename, t); size = t; return r; }
-		   };
+					   inline std::list<std::string> fileList() { return zip->namelist(); }
+					   inline bool hasFile(const std::string & filename) { return zip->has_file(filename); }
+					   inline std::string getAsText(const std::string & filename) { return zip->read(filename); }
+					   inline char * getAsBin(const std::string & filename, unsigned long long & size) { std::size_t t; char * r = zip->read(filename, t); size = t; return r; }
+				};
+			}
 		   inline std::string findCode(const std::string & file) {
-				if (ZipReader::Get().hasFile(file))
-					return ZipReader::Get().getAsText(file);
+				if (WWW_GENERATOR_ZIP_READED::ZipReader::Get().hasFile(file))
+					return WWW_GENERATOR_ZIP_READED::ZipReader::Get().getAsText(file);
 				return "";
 		   }
 		   inline char * findResource(const std::string & file, unsigned long long & size) {
-			   if (ZipReader::Get().hasFile(file)) {
-					return  ZipReader::Get().getAsBin(file, size);
+			   if (WWW_GENERATOR_ZIP_READED::ZipReader::Get().hasFile(file)) {
+					return  WWW_GENERATOR_ZIP_READED::ZipReader::Get().getAsBin(file, size);
 			   }
 			   return nullptr;
 		   }

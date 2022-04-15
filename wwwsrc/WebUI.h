@@ -19,7 +19,7 @@ struct UserSession {
 class WebUI : public ShadowSocksControllerUpdateStatus {
 	private:
 		inline Request makeRequest() const {
-		Request resp(new HttpRequest());
+			Request resp(new HttpRequest());
 			resp->headers["Cache-Control"] = "no-cache";
 			resp->headers["Server"] = "nginx";
 			resp->status = 200;
