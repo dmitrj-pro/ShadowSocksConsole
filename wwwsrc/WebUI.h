@@ -14,6 +14,7 @@ struct UserSession {
 	List<String> notify;
 	int started = 0;
 	String cookie ="";
+	void * consoleLooper = nullptr;
 };
 
 class WebUI : public ShadowSocksControllerUpdateStatus {
@@ -53,6 +54,7 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 		std::mutex cookies_lock;
 
 		void notifyUser(const String & user_id, const String & msg);
+		void logoutOldUser();
 		UserSession & getUserSession(const String & id);
 		bool existsUserSession(const String & id) const;
 
@@ -152,6 +154,7 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 		WebUI(const String & web_host="localhost", unsigned short port = 35080): web_port(port), web_host(web_host) {}
 		void stop();
 		void start();
+		inline void startMainLoop() { _start(); }
 
 		virtual void UpdateServerStatus(const String & server, const String & msg) override;
 		virtual void UpdateTaskStatus(const String & server, const String & msg) override;

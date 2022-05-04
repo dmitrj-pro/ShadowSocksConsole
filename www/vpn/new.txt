@@ -22,9 +22,31 @@
 			<span class="form-radio-sign">no</span>
 		</label>
 	</div>
+	<div class="form-check">
+		<label>Push default routing</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="enableDefaultRouting" value="yes" checked="">
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="enableDefaultRouting">
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
 	<div class="form-group">
 		<label for="dns">DNS Servers:</label>
 		<textarea class="form-control" id="dns" name="dns" rows="5"></textarea>
+	</div>
+	<div class="form-check">
+		<label>Enable DNS over ShadowSocks</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="isDNS2Socks" value="yes" checked="">
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="isDNS2Socks">
+			<span class="form-radio-sign">no</span>
+		</label>
 	</div>
 	<div class="form-group">
 		<label for="ignore">Ignore IP address:</label>

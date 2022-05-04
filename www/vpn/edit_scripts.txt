@@ -48,6 +48,14 @@
 		<label for="ignore">Ignore IP address:</label>
 		<textarea class="form-control" id="ignore" name="ignore" rows="5">{}</textarea>
 	</div>
+	<div class="form-group">
+		<label for="postStartCommand">Execute command after start VPN:</label>
+		<input type="text" class="form-control" id="postStartCommand" name="postStartCommand" placeholder="Command for start" value="{}">
+	</div>
+	<div class="form-group">
+		<label for="preStopCommand">Execute command before stop VPN:</label>
+		<input type="text" class="form-control" id="preStopCommand" name="preStopCommand" placeholder="Command for start" value="{}">
+	</div>
 	<div class="card-action">
 		<button class="btn btn-success">Save</button>
 	</div>

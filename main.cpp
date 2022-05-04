@@ -40,7 +40,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 	private:
 		bool reopenConsole = true;
 		bool loggingEnabled = false;
-		ShadowSocksServer * service_server;
+		ShadowSocksServer * service_server = nullptr;
 
 		SmartPtr<WebUI> webui;
 		struct Host {
@@ -67,24 +67,33 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 					DP_LOG_FATAL << "Can't listen host " << host_web.host << ":" << host_web.port;
 					return;
 				}
+				ShadowSocksController::Get().SetExitFinc([this]() {
+					webui->stop();
+				});
 				webui = SmartPtr<WebUI>(new WebUI(host_web.host, host_web.port));
-				webui->start();
-				DP_LOG_INFO << "Web server started on " << host_web.host << ":" << host_web.port;
+				if (host_service.port > 0)
+					webui->start();
+				else
+					webui->startMainLoop();
 			}
+			if (host_service.port > 0) {
+				service_server = new ShadowSocksServer();
+				ShadowSocksController::Get().SetExitFinc([this]() {
+					if (service_server != nullptr)
+						service_server->Stop();
+					if (host_web.port > 0 && !webui.isNull())
+						webui->stop();
+				});
 
-			service_server = new ShadowSocksServer();
-			ShadowSocksController::Get().SetExitFinc([this]() {
-				service_server->Stop();
-			});
+				if (!__DP_LIB_NAMESPACE__::TCPServer::portIsAllow(host_service.host, host_service.port)) {
+					this->SetExitCode(2);
+					DP_LOG_FATAL << "Can't listen host " << host_service.host << ":" << host_service.port;
+					return;
+				}
 
-			if (!__DP_LIB_NAMESPACE__::TCPServer::portIsAllow(host_service.host, host_service.port)) {
-				this->SetExitCode(2);
-				DP_LOG_FATAL << "Can't listen host " << host_service.host << ":" << host_service.port;
-				return;
+				DP_LOG_INFO << "Try to start service host " << host_service.host << ":" << host_service.port;
+				service_server->Start(host_service.host, host_service.port);
 			}
-
-			DP_LOG_INFO << "Try to start service host " << host_service.host << ":" << host_service.port;
-			service_server->Start(host_service.host, host_service.port);
 			DP_LOG_INFO << "ShadowSocksConsole service stoped";
 		}
 		void consoleMain();
@@ -102,7 +111,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 		virtual void MainExit() override {
 			this->SetNeedToExit(true);
 			DP_LOG_WARNING << "Received close";
-			if (isService()) {
+			if (isService() && host_service.port > 0) {
 				service_server->Stop();
 			} else {
 				close(0);
@@ -233,6 +242,7 @@ void ShadowSocksMain::consoleMain() {
 	}
 }
 
+bool ShadowSocksSettings::enablePreStartStopScripts = false;
 void ShadowSocksMain::readHostData() {
 	__DP_LIB_NAMESPACE__::Path file = __DP_LIB_NAMESPACE__::Path(fileHostData());
 	if (file.IsFile()) {
@@ -240,6 +250,7 @@ void ShadowSocksMain::readHostData() {
 		in.open(file.Get());
 		SmartParser webhost ("web_host${1:null<string>}=${host:trim<string>}:${port:int}");
 		SmartParser cchost ("service_host${1:null<string>}=${host:trim<string>}:${port:int}");
+		SmartParser enable_scripting ("tun_scripts${1:null<string>}=${value:int}");
 		while (!in.eof()) {
 			String line;
 			getline(in, line);
@@ -251,12 +262,16 @@ void ShadowSocksMain::readHostData() {
 				host_service.host = cchost.Get("host");
 				host_service.port = parse<unsigned short>(cchost.Get("port"));
 			}
+			if (enable_scripting.Check(line)) {
+				ShadowSocksSettings::enablePreStartStopScripts = parse<bool>(enable_scripting.Get("value"));
+			}
 		}
 	} else {
 		host_web.host = "127.0.0.1";
 		host_web.port = 0;
 		host_service.host = "127.0.0.1";
 		host_service.port = 8898;
+		ShadowSocksSettings::enablePreStartStopScripts = false;
 	}
 }
 
@@ -273,6 +288,7 @@ void ShadowSocksMain::writeHostData() {
 	out.open(file.Get());
 	out << "web_host=" << host_web.host << ":" << host_web.port << "\n";
 	out << "service_host=" << host_service.host << ":" << host_service.port << "\n";
+	out << "tun_scripts=" << toString(ShadowSocksSettings::enablePreStartStopScripts) << "\n";
 	out.close();
 	SetNeedToExit(true);
 }
@@ -629,6 +645,10 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const SSClientFlags 
 		if (conf.tunName.size() == 0)
 			throw EXCEPTION("Can't auto detect default TAP interface");
 	}
+	if (! ShadowSocksSettings::enablePreStartStopScripts) {
+		conf.preStopCommand = "";
+		conf.postStartCommand = "";
+	}
 	if (! run_params.multimode)
 		res = new ShadowSocksClient(srv_res, r, run_params, conf);
 	else {
@@ -778,6 +798,10 @@ String ShadowSocksSettings::GetSource() {
 		Set(key + "tunName", conf.tunName);
 		Set(key + "defaultRoute", conf.defaultRoute);
 		SetType(key + "removeDefaultRoute", conf.removeDefaultRoute);
+		SetType(key + "enableDefaultRouting", conf.enableDefaultRouting);
+		SetType(key + "isDNS2Socks", conf.isDNS2Socks);
+		Set(key + "preStopCommand", conf.preStopCommand);
+		Set(key + "postStartCommand", conf.postStartCommand);
 		String ids = "";
 		for (const String & id : conf.dns)
 			ids = ids + id + ";";
@@ -915,6 +939,17 @@ void ShadowSocksSettings::Load(const String & text) {
 		ReadN(key + "tunName", conf.tunName);
 		ReadN(key + "defaultRoute", conf.defaultRoute);
 		ReadNType(key + "removeDefaultRoute", conf.removeDefaultRoute, bool);
+		if (setting.Conteins(key + "isDNS2Socks")) {
+			ReadNType(key + "isDNS2Socks", conf.isDNS2Socks, bool);
+		} else {
+			conf.isDNS2Socks = true;
+		}
+		if (setting.Conteins(key + "enableDefaultRouting")) {
+			ReadNType(key + "enableDefaultRouting", conf.enableDefaultRouting, bool);
+		} else
+			conf.enableDefaultRouting = true;
+		ReadN(key + "preStopCommand", conf.preStopCommand);
+		ReadN(key + "postStartCommand", conf.postStartCommand);
 
 		String ids = "";
 		ReadN(key + "DNS", ids);

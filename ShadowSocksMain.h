@@ -224,6 +224,9 @@ struct Tun2SocksConfig{
 	List<String> ignoreIP;
 	String defaultRoute = "";
 	bool removeDefaultRoute = true;
+	bool enableDefaultRouting = true;
+	String postStartCommand = "";
+	String preStopCommand = "";
 	String name = "";
 	bool isDNS2Socks = true;
 	bool hideDNS2Socks = true;
@@ -260,6 +263,7 @@ struct ShadowSocksSettings{
 	bool fixLinuxWgetPath = true;
 	bool enableDeepCheckServer = false;
 	bool autoDetectTunInterface = false;
+	static bool enablePreStartStopScripts;
 	String tempPath = "${INSTALLED}";
 	bool enableLogging = false;
 	bool hideDNS2Socks = true;

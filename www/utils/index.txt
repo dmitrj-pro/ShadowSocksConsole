@@ -95,5 +95,31 @@
 			</form>
 		</td>
 	</tr>
+	<tr>
+		<td>
+			<form method="POST" style="display: block;">
+				<div class="form-group">
+					<label for="cmd">ShadowSocksConsole command line:</label>
+					<textarea readonly class="form-control" id="cmd" name="cmd" rows="5">{}</textarea>
+				</div>
+				<div style="display:flex;">
+					<div class="form-group">
+						<label for="command">Enter command:</label>
+						<input type="text" class="form-control" id="command" name="command" placeholder="Enter command">
+					</div>
+					<div class="form-group" style="display:none;">
+						<input type="text" class="form-control" id="mode" name="mode" value="execute_cmd">
+					</div>
+					<div class="card-action">
+						<button class="btn btn-success">Execute</button>
+					</div>
+				</div>
+			</form>
+			<script>
+				var textarea = document.getElementById('cmd');
+				textarea.scrollTop = textarea.scrollHeight;
+			</script>
+		</td>
+	</tr>
 
 </table>

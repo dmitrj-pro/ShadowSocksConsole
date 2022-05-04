@@ -7,6 +7,7 @@
 #include <_Driver/ServiceMain.h>
 #include <Network/TCPClient.h>
 #include <Network/Utils.h>
+#include "../ConsoleLoop.h"
 
 using __DP_LIB_NAMESPACE__::OStrStream;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -17,16 +18,25 @@ using __DP_LIB_NAMESPACE__::trim;
 
 void WebUI::stop() {
 	if (!srv.isNull()) {
-		SmartPtr<Thread> th = thread;
 		SmartPtr<HttpHostPathRouterServer> s = srv;
-		thread = SmartPtr<Thread>(nullptr);
 		srv = SmartPtr<HttpHostPathRouterServer>(nullptr);
-
 		s->exit();
-		th->join();
+
+		if (!thread.isNull()) {
+			SmartPtr<Thread> th = thread;
+			thread = SmartPtr<Thread>(nullptr);
+			th->join();
+		}
 	}
 	ShadowSocksController::Get().disconnectNotify(this);
 }
+
+struct ConsoleSession{
+	OStrStream out;
+	IStrStream in;
+	ConsoleLooper<OStrStream, IStrStream> * looper = nullptr;
+	~ConsoleSession() { if (looper != nullptr) { delete looper; looper = nullptr; } }
+};
 
 void WebUI::start() {
 	thread = SmartPtr<Thread>(new Thread(&WebUI::_start, this));
@@ -55,7 +65,7 @@ void WebUI::notifyUser(const String & user_id, const String & msg) {
 	getUserSession(user_id).notify.push_back(msg);
 }
 
-#define CHECK_AUTH 	if (!__DP_LIB_NAMESPACE__::ConteinsKey(r->cookie, "auth") || !existsUserSession(r->cookie["auth"])) { \
+#define CHECK_AUTH 	logoutOldUser(); if (!__DP_LIB_NAMESPACE__::ConteinsKey(r->cookie, "auth") || !existsUserSession(r->cookie["auth"])) { \
 		return makeRedirect(r, "/login.html"); \
 	}
 
@@ -142,7 +152,7 @@ void WebUI::_start() {
 	srv->add_route("*", "/notify_exists", "GET", [this](Request r) { CHECK_AUTH; return this->processCheckNews(r); });
 
 	srv->add_route("*", "*", "GET", [this](Request r) { return this->processGetStaticFile(r); });
-	DP_LOG_INFO << "Start web server " << web_host << ":" << web_port;
+	DP_LOG_INFO << "Started web server " << web_host << ":" << web_port;
 	srv->listen(web_host, web_port);
 }
 
@@ -359,11 +369,37 @@ Request WebUI::processPostExport(Request req) {
 	return resp;
 }
 
+void WebUI::logoutOldUser() {
+	cookies_lock.lock();
+	for (auto it = cookies.begin(); it != cookies.end(); it++) {
+		unsigned int running_time = time(nullptr) - it->started;
+		if (running_time > (60 * 60)) {
+			if (it->consoleLooper != nullptr) {
+				ConsoleSession * ss = (ConsoleSession *) it->consoleLooper;
+				delete ss->looper;
+				ss->looper = nullptr;
+				delete ss;
+				it->consoleLooper = nullptr;
+			}
+			cookies.erase(it);
+			break;
+		}
+	}
+	cookies_lock.unlock();
+}
+
 Request WebUI::processGetLogout(Request req) {
 	auto user_id = req->cookie["auth"];
 	cookies_lock.lock();
 	for (auto it = cookies.begin(); it != cookies.end(); it++) {
 		if (it->cookie == user_id) {
+			if (it->consoleLooper != nullptr) {
+				ConsoleSession * ss = (ConsoleSession *) it->consoleLooper;
+				delete ss->looper;
+				ss->looper = nullptr;
+				delete ss;
+				it->consoleLooper = nullptr;
+			}
 			cookies.erase(it);
 			break;
 		}
@@ -387,6 +423,7 @@ Request WebUI::processGetExit(Request) {
 }
 Request WebUI::processPostExit(Request) {
 	Thread * th = new Thread([]() {
+		__DP_LIB_NAMESPACE__::ServiceSinglton::Get().LoopWait(500);
 		__DP_LIB_NAMESPACE__::ServiceSinglton::Get().ExecuteClose();
 	});
 	th->SetName("WebUI::processPostExit");
@@ -400,7 +437,7 @@ Request WebUI::processPostExit(Request) {
 	return resp;
 }
 
-Request WebUI::processGetUtils(Request, const UtilsStruct & res) {
+Request WebUI::processGetUtils(Request req, const UtilsStruct & res) {
 	OStrStream out;
 	for (const String & ip : res.resolve_result)
 		out << "<p>" << ip << "</p>";
@@ -408,6 +445,15 @@ Request WebUI::processGetUtils(Request, const UtilsStruct & res) {
 	OStrStream out2;
 	for (unsigned short ip : res.find_free_result)
 		out2 << "<p>" << res.find_free_host  + ":" + toString(ip) << "</p>\n";
+
+	String cmd_out = "";
+	{
+		auto user_id = req->cookie["auth"];
+		UserSession & s = getUserSession(user_id);
+		if (s.consoleLooper != nullptr)
+			cmd_out = ((ConsoleSession *) s.consoleLooper)->out.str();
+
+	}
 
 	String html = makePage("Utils", "utils/index.txt", List<String>(
 														{
@@ -421,7 +467,8 @@ Request WebUI::processGetUtils(Request, const UtilsStruct & res) {
 															 out.str(),
 															 res.find_free_host,
 															 toString(res.find_free_count),
-															 out2.str()
+															 out2.str(),
+															 cmd_out
 														 }));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -458,6 +505,30 @@ Request WebUI::processPostUtils(Request req) {
 		res.check_port_port = parse<unsigned short>(req->post["port"].value);
 		res.check_port_result = ShadowSocksClient::portIsAllow(res.check_port_host, res.check_port_port) ? findText("utils/check_port_allow.txt") : findText("utils/check_port_dinay.txt");
 		return processGetUtils(req, res);
+	}
+	if (mode == "execute_cmd") {
+		if (!ConteinsKey(req->post, "command"))
+			return HttpServer::generate404(req->method, req->host, req->path);
+
+		auto user_id = req->cookie["auth"];
+		UserSession & s = getUserSession(user_id);
+		if (s.consoleLooper == nullptr) {
+			ConsoleSession * ses = new ConsoleSession{};
+			s.consoleLooper = ses;
+			ses->looper = makeLooper(ses->out, ses->in);
+		}
+		auto looper = ((ConsoleSession *) s.consoleLooper)->looper;
+		auto & out = ((ConsoleSession *) s.consoleLooper)->out;
+		try {
+			out << "> " << req->post["command"].value << "\n";
+			DP_LOG_DEBUG << "Input command: '" << req->post["command"].value << "'\n";
+			looper->ManualCMD(req->post["command"].value);
+		} catch (__DP_LIB_NAMESPACE__::LineException e) {
+			out << e.message() << "\nUse help\n";
+		}
+		UtilsStruct res = makeUtilsStruct();
+		return processGetUtils(req, res);
+
 	}
 	if (mode == "check_connect") {
 		if (!ConteinsKey(req->post, "host") || !ConteinsKey(req->post, "port"))

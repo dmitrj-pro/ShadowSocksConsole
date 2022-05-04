@@ -264,7 +264,7 @@ Ethernet adapter tuntap:
 List<char> LiteralReader::delimers{'[', ',', ']', '=', '>', '<', ':', ';', '+'/*, '-'*/, ' ', '\n', '\r' };
 
 void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCrash) {
-	if (this->config.dns.size() < 1) {
+	if (this->config.dns.size() < 1 && config.isDNS2Socks) {
 		throw EXCEPTION("Need one or more dns servers");
 		return;
 	}
@@ -280,16 +280,18 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 	}
 	ap << "-proxyType" << "socks";
 	ap << "-tunAddr" << "192.168.198.2";
-	ap << "-tunDns";
-	ap.SetReadedFunc(ReadFuncProc);
-	if (!config.isDNS2Socks){
-		String dns = "";
-		for (const String & dn : this->config.dns)
-			dns = dns + dn + ",";
-		dns = dns.substr(0, dns.size()-1);
-		ap << dns;
-	} else {
-		ap << "127.0.0.1";
+	if (config.isDNS2Socks || this->config.dns.size() > 0) {
+		ap << "-tunDns";
+		ap.SetReadedFunc(ReadFuncProc);
+		if (config.isDNS2Socks){
+			ap << "127.0.0.1";
+		} else {
+			String dns = "";
+			for (const String & dn : this->config.dns)
+				dns = dns + dn + ",";
+			dns = dns.substr(0, dns.size()-1);
+			ap << dns;
+		}
 	}
 	ap << "-tunGw" << "192.168.198.1";
 	ap << "-tunMask" << "255.255.255.0";
@@ -400,7 +402,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 
 		}
 	}
-	{
+	if (config.enableDefaultRouting) {
 		#ifdef DP_WIN
 			Application p ("C:\\Windows\\System32\\ROUTE.EXE");
 			p << "-p" << "ADD" << "0.0.0.0" << "MASK" << "0.0.0.0" << "192.168.198.1" << "IF" << IF;
@@ -432,8 +434,22 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 		t.ExecInNewThread();
 		t.WaitForStart();
 	}
-	if ((!tun2socks->isFinished()) && (!ap.isFinished()))
+	if ((tun2socks == nullptr ? true : !tun2socks->isFinished()) && (!ap.isFinished())) {
 		_onSuccess();
+		if (config.postStartCommand.size() > 0) {
+			SmartParser prs{config.postStartCommand};
+			prs.SetAll("tunName", this->config.tunName);
+			prs.SetAll("defaultRoute", this->config.defaultRoute);
+			prs.SetAll("enableDefaultRouting", toString(this->config.enableDefaultRouting));
+			prs.SetAll("removeDefaultRoute", toString(this->config.removeDefaultRoute));
+
+			auto vec = __DP_LIB_NAMESPACE__::split(prs.ToString(), ' ');
+			Application app { vec[0] };
+			for (unsigned int i = 1; i < vec.size(); i++)
+				app << vec[i] << " ";
+			DP_LOG_INFO << "Execute postStartCommand result: " << app.ExecAll();
+		}
+	}
 
 }
 
@@ -459,6 +475,22 @@ void Tun2Socks::ThreadLoop() {
 }
 
 void Tun2Socks::Stop() {
+	if (_is_exit)
+		return;
+	if (config.preStopCommand.size() > 0) {
+		SmartParser prs{config.preStopCommand};
+		prs.SetAll("tunName", this->config.tunName);
+		prs.SetAll("defaultRoute", this->config.defaultRoute);
+		prs.SetAll("enableDefaultRouting", toString(this->config.enableDefaultRouting));
+		prs.SetAll("removeDefaultRoute", toString(this->config.removeDefaultRoute));
+
+		auto vec = __DP_LIB_NAMESPACE__::split(prs.ToString(), ' ');
+		Application app { vec[0] };
+		for (unsigned int i = 1; i < vec.size(); i++)
+			app << vec[i] << " ";
+		DP_LOG_INFO << "Execute postStartCommand result: " << app.ExecAll();
+	}
+
 	_is_exit = true;
 	for (const String & ip : this->config.ignoreIP){
 		#ifdef DP_WIN
@@ -471,7 +503,7 @@ void Tun2Socks::Stop() {
 		p.Exec();
 
 	}
-	{
+	if (config.enableDefaultRouting) {
 		#ifdef DP_WIN
 			Application p ("C:\\Windows\\System32\\ROUTE.EXE");
 			p << "-p" << "DELETE" << "0.0.0.0" << "MASK" << "0.0.0.0" << "192.168.198.1";

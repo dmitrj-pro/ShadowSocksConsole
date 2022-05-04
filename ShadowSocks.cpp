@@ -224,14 +224,23 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 		if (!run_params.multimode)
 			tun2socks->config.ignoreIP.push_back(srv->host);
 		tun2socks->SetUDPTimeout(convertTime(this->udpTimeout));
-		tun2socks->Start([this, _onSuccess] () {
-			if (!_socks->isFinished()) {
-				this->status = ShadowSocksClientStatus::Started;
-				_onSuccess(tk->name);
-			}
-		}, [this](const String & , const ExitStatus & status) {
+		try{
+			tun2socks->Start([this, _onSuccess] () {
+				if (!_socks->isFinished()) {
+					this->status = ShadowSocksClientStatus::Started;
+					_onSuccess(tk->name);
+				}
+			}, [this](const String & , const ExitStatus & status) {
+				this->onCrash(status);
+			});
+		} catch (__DP_LIB_NAMESPACE__::Exception & e) {
+			ExitStatus status;
+			status.code = ExitStatusCode::ApplicationError;
+			status.str = e.toString();
 			this->onCrash(status);
-		});
+			return;
+		}
+
 		tun2socks->WaitForStart();
 		is_run_vpn = true;
 	}

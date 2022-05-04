@@ -194,6 +194,19 @@ Request WebUI::processGetEditSettings(Request req) {
 																				"Speed"
 																		  }));
 		}
+		if (params == "enablePreStartStopScripts") {
+			var = "Enable pre start/stop tun scripting (WARN: Parametr can't edit by WebUI)";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"true",
+																				ShadowSocksSettings::enablePreStartStopScripts ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Enable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"false",
+																				(!ShadowSocksSettings::enablePreStartStopScripts) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+		}
 
 		if (gen.str().size() == 0)
 			return HttpServer::generate404(req->method, req->host, req->path);
@@ -414,6 +427,11 @@ Request WebUI::processGetSettings(Request) {
 															"Auto check server download url",
 															c.auto_check_download_url,
 															"auto_check_download_url"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Enable pre start/stop tun scripting",
+															toString(ShadowSocksSettings::enablePreStartStopScripts),
+															"enablePreStartStopScripts"
 													  }));
 
 	String html = makePage("Settings", "settings/settings_index.txt", List<String>( { out.str()}));

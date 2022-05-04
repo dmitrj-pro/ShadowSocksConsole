@@ -39,6 +39,7 @@
 									<th scope="col">Default Route</th>
 									<th scope="col">Remove default route</th>
 									<th scope="col">Push default routing</th>
+									<th scope="col">Post start/Post stop</th>
 									<th scope="col">DNS</th>
 									<th scope="col">Ignore IP</th>
 									<th scope="col">Action</th>

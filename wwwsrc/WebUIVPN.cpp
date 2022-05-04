@@ -27,11 +27,28 @@ Request WebUI::processGetVPN(Request) {
 		for (String i : t.ignoreIP)
 			ignoreIp << i << ", ";
 
-		out << findFillText("vpn/vpn_item.txt", List<String>({
+		if (ShadowSocksSettings::enablePreStartStopScripts)
+			out << findFillText("vpn/vpn_item_scripts.txt", List<String>({
 																t.name,
 																t.tunName,
 																t.defaultRoute,
 																toString(t.removeDefaultRoute),
+																toString(t.enableDefaultRouting),
+																toString(t.postStartCommand.size() > 0),
+																toString(t.preStopCommand.size() > 0),
+																dns.str(),
+																ignoreIp.str(),
+																t.name,
+																t.name,
+																t.name
+														  }));
+		else
+			out << findFillText("vpn/vpn_item.txt", List<String>({
+																t.name,
+																t.tunName,
+																t.defaultRoute,
+																toString(t.removeDefaultRoute),
+																toString(t.enableDefaultRouting),
 																dns.str(),
 																ignoreIp.str(),
 																t.name,
@@ -40,7 +57,11 @@ Request WebUI::processGetVPN(Request) {
 														  }));
 	}
 
-	String html = makePage("VPN", "vpn/vpn_index.txt", List<String>( { out.str()}));
+	String html = "";
+	if (ShadowSocksSettings::enablePreStartStopScripts)
+		html = makePage("VPN", "vpn/vpn_index_scripts.txt", List<String>( { out.str()}));
+	else
+		html = makePage("VPN", "vpn/vpn_index.txt", List<String>( { out.str()}));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
@@ -111,12 +132,33 @@ Request WebUI::processGetVPNEditPage(Request req){
 	for (const String & i : cnf.ignoreIP)
 		ignore << i << "\n";
 
-	String html = makePage("Edit VPN " + cnf.name, "vpn/edit.txt", List<String>({
+	String html = "";
+	if (ShadowSocksSettings::enablePreStartStopScripts)
+		html = makePage("Edit VPN " + cnf.name, "vpn/edit_scripts.txt", List<String>({
 															cnf.tunName,
 															cnf.defaultRoute,
 															cnf.removeDefaultRoute ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
 															!cnf.removeDefaultRoute ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															cnf.enableDefaultRouting ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															!cnf.enableDefaultRouting ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
 															dns.str(),
+															cnf.isDNS2Socks ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															!cnf.isDNS2Socks ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															ignore.str(),
+															cnf.postStartCommand,
+															cnf.preStopCommand
+														}));
+	else
+		html = makePage("Edit VPN " + cnf.name, "vpn/edit.txt", List<String>({
+															cnf.tunName,
+															cnf.defaultRoute,
+															cnf.removeDefaultRoute ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															!cnf.removeDefaultRoute ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															cnf.enableDefaultRouting ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															!cnf.enableDefaultRouting ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															dns.str(),
+															cnf.isDNS2Socks ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
+															!cnf.isDNS2Socks ? findText("vpn/checket_true.txt") : findText("vpn/checket_false.txt"),
 															ignore.str()
 														}));
 	Request resp = makeRequest();
@@ -144,7 +186,18 @@ Request WebUI::processPostVPNEditPage(Request req){
 	String rem = "";
 	readParametr_nd(rem, "removeroute");
 	cnf.removeDefaultRoute = rem == "yes";
-	readParametr_nd(rem, "dns");
+	readParametr_nd(rem, "isDNS2Socks");
+	cnf.isDNS2Socks = rem == "yes";
+	readParametr_nd(rem, "enableDefaultRouting");
+	cnf.enableDefaultRouting = rem == "yes";
+	readParametr_n(cnf.postStartCommand, "postStartCommand");
+	readParametr_n(cnf.preStopCommand, "preStopCommand");
+	if (cnf.isDNS2Socks) {
+		readParametr_nd(rem, "dns");
+	} else {
+		rem = "";
+		readParametr_n(rem, "dns");
+	}
 	{
 		IStrStream in;
 		in.str(rem);
@@ -186,7 +239,7 @@ Request WebUI::processPostVPNEditPage(Request req){
 }
 
 Request WebUI::processGetNewVPNPage(Request){
-	String html = makePage("New VPN", "vpn/new.txt", List<String>({
+	String html = makePage("New VPN", ShadowSocksSettings::enablePreStartStopScripts ? "vpn/new_scripts.txt" : "vpn/new.txt", List<String>({
 															Tun2Socks::DetectInterfaceName(),
 															Tun2Socks::DetectDefaultRoute()
 														}));
@@ -210,7 +263,18 @@ Request WebUI::processPostNewVPNPage(Request req){
 	String rem = "";
 	readParametr_nd(rem, "removeroute");
 	cnf.removeDefaultRoute = rem == "yes";
-	readParametr_nd(rem, "dns");
+	readParametr_nd(rem, "isDNS2Socks");
+	cnf.isDNS2Socks = rem == "yes";
+	readParametr_nd(rem, "enableDefaultRouting");
+	cnf.enableDefaultRouting = rem == "yes";
+	readParametr_n(cnf.postStartCommand, "postStartCommand");
+	readParametr_n(cnf.preStopCommand, "preStopCommand");
+	if (cnf.isDNS2Socks) {
+		readParametr_nd(rem, "dns");
+	} else {
+		rem = "";
+		readParametr_n(rem, "dns");
+	}
 	{
 		IStrStream in;
 		in.str(rem);

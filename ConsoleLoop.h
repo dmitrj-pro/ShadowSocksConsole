@@ -1059,6 +1059,15 @@ void ConsoleLooper<OutStream, InStream>::EditVPN(ParamsReader & arg) {
 	if (tx.size() > 1) conf.tunName = tx;
 	tx = arg.read("Remove default route (0/1)", toString(conf.removeDefaultRoute));
 	if (tx.size() > 0) conf.removeDefaultRoute = parse<bool>(tx);
+	tx = arg.read("Push default routing (0/1)", toString(conf.enableDefaultRouting));
+	if (tx.size() > 0) conf.enableDefaultRouting = parse<bool>(tx);
+	if (ShadowSocksSettings::enablePreStartStopScripts) {
+		tx = arg.read("Run command after start VPN", conf.postStartCommand);
+		if (tx.size() > 1) conf.postStartCommand = tx;
+		tx = arg.read("Run command before stop VPN", conf.preStopCommand);
+		if (tx.size() > 1) conf.preStopCommand = tx;
+	}
+
 	tx = arg.read("Enable DNS2Socks", toString(conf.isDNS2Socks));
 	if (tx.size() > 0) conf.isDNS2Socks = parse<bool>(tx);
 
@@ -1111,6 +1120,9 @@ void ConsoleLooper<OutStream, InStream>::VPNAdd(ParamsReader & arg) {
 	conf.defaultRoute = arg.read("Default route (Example 192.168.0.1)");
 	conf.tunName = arg.read("Tun interface name");
 	conf.removeDefaultRoute = arg.readbool("Remove default route (0/1)");
+	conf.enableDefaultRouting = arg.readbool("Push default routing (0/1)");
+	conf.postStartCommand = arg.read("Run command after start VPN");
+	conf.preStopCommand = arg.read("Run command before stop VPN");
 	conf.isDNS2Socks = arg.readbool("Enable DNS2Socks");
 	cmd = arg.read("DNS");
 	while (cmd.size() > 1) {
@@ -2095,6 +2107,7 @@ void ConsoleLooper<OutStream, InStream>::ListVPNMode(ParamsReader &) {
 		 << std::setw(15) << "Tun Name"
 		 << std::setw(20) << "Default Route"
 		 << std::setw(5) << "Remove"
+		 << std::setw(5) << "is default"
 		 << std::setw(10) << "DNS"
 		 << std::setw(17) << "Ignore IP\n";
 
@@ -2103,7 +2116,7 @@ void ConsoleLooper<OutStream, InStream>::ListVPNMode(ParamsReader &) {
 			 << std::setw(10) << conf.name
 			 << std::setw(15) << conf.tunName
 			 << std::setw(20) << conf.defaultRoute
-			 << std::setw(5) << conf.removeDefaultRoute << "\n";
+			 << std::setw(5) << conf.removeDefaultRoute << std::setw(5) << conf.enableDefaultRouting << "\n";
 			 //<< std::setw(17) << "DN
 			 //<< std::setw(17)
 		for (const String & d: conf.dns)
@@ -2132,6 +2145,7 @@ void ConsoleLooper<OutStream, InStream>::ShowVPN(ParamsReader & arg) {
 		 << std::setw(15) << "Tun Name"
 		 << std::setw(20) << "Default Route"
 		 << std::setw(5) << "Remove"
+		 << std::setw(5) << "is default"
 		 << std::setw(10) << "DNS"
 		 << std::setw(17) << "Ignore IP\n";
 
@@ -2140,7 +2154,7 @@ void ConsoleLooper<OutStream, InStream>::ShowVPN(ParamsReader & arg) {
 			 << std::setw(10) << conf.name
 			 << std::setw(15) << conf.tunName
 			 << std::setw(20) << conf.defaultRoute
-			 << std::setw(5) << conf.removeDefaultRoute << "\n";
+			 << std::setw(5) << conf.removeDefaultRoute << std::setw(5) << conf.enableDefaultRouting << "\n";
 			 //<< std::setw(17) << "DN
 			 //<< std::setw(17)
 		for (const String & d: conf.dns)
@@ -2167,7 +2181,7 @@ template <typename OutStream, typename InStream>
 void ConsoleLooper<OutStream, InStream>::List(ParamsReader & arg) {
 	String cmd = arg.read("type");
 	if (HELP_COND) {
-		cout << "Supported type:\n\ttasks\n\tservers\n\ttuns\n\tvpn\n\tvariables\nrun\n";
+		cout << "Supported type:\n\ttasks\n\tservers\n\ttuns\n\tvpn\n\tvariables\nrun\nruns\n";
 		return;
 	}
 	if (cmd == "servers")

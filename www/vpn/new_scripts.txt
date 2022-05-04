@@ -1,5 +1,9 @@
 <form method="POST">
 	<div class="form-group">
+		<label for="name">VPN name:</label>
+		<input type="text" class="form-control" id="name" name="name" placeholder="Enter name for VPN">
+	</div>
+	<div class="form-group">
 		<label for="tunname">Tun Name:</label>
 		<input type="text" class="form-control" id="tunname" name="tunname" placeholder="Enter network interface name for TunTap" value="{}">
 	</div>
@@ -10,45 +14,53 @@
 	<div class="form-check">
 		<label>Remove default route</label><br>
 		<label class="form-radio-label">
-			<input class="form-radio-input" type="radio" name="removeroute" value="yes" {}>
+			<input class="form-radio-input" type="radio" name="removeroute" value="yes">
 			<span class="form-radio-sign">yes</span>
 		</label>
 		<label class="form-radio-label ml-3">
-			<input class="form-radio-input" type="radio" name="removeroute" value="no" {}>
+			<input class="form-radio-input" type="radio" name="removeroute" value="no" checked="">
 			<span class="form-radio-sign">no</span>
 		</label>
 	</div>
 	<div class="form-check">
 		<label>Push default routing</label><br>
 		<label class="form-radio-label">
-			<input class="form-radio-input" type="radio" name="enableDefaultRouting" value="yes" {}>
+			<input class="form-radio-input" type="radio" name="enableDefaultRouting" value="yes" checked="">
 			<span class="form-radio-sign">yes</span>
 		</label>
 		<label class="form-radio-label ml-3">
-			<input class="form-radio-input" type="radio" name="enableDefaultRouting" value="no" {}>
+			<input class="form-radio-input" type="radio" name="enableDefaultRouting">
 			<span class="form-radio-sign">no</span>
 		</label>
 	</div>
 	<div class="form-group">
 		<label for="dns">DNS Servers:</label>
-		<textarea class="form-control" id="dns" name="dns" rows="5">{}</textarea>
+		<textarea class="form-control" id="dns" name="dns" rows="5"></textarea>
 	</div>
 	<div class="form-check">
 		<label>Enable DNS over ShadowSocks</label><br>
 		<label class="form-radio-label">
-			<input class="form-radio-input" type="radio" name="isDNS2Socks" value="yes" {}>
+			<input class="form-radio-input" type="radio" name="isDNS2Socks" value="yes" checked="">
 			<span class="form-radio-sign">yes</span>
 		</label>
 		<label class="form-radio-label ml-3">
-			<input class="form-radio-input" type="radio" name="isDNS2Socks" value="no" {}>
+			<input class="form-radio-input" type="radio" name="isDNS2Socks">
 			<span class="form-radio-sign">no</span>
 		</label>
 	</div>
 	<div class="form-group">
 		<label for="ignore">Ignore IP address:</label>
-		<textarea class="form-control" id="ignore" name="ignore" rows="5">{}</textarea>
+		<textarea class="form-control" id="ignore" name="ignore" rows="5"></textarea>
+	</div>
+	<div class="form-group">
+		<label for="postStartCommand">Execute command after start VPN:</label>
+		<input type="text" class="form-control" id="postStartCommand" name="postStartCommand" placeholder="Command for start">
+	</div>
+	<div class="form-group">
+		<label for="preStopCommand">Execute command before stop VPN:</label>
+		<input type="text" class="form-control" id="preStopCommand" name="preStopCommand" placeholder="Command for start">
 	</div>
 	<div class="card-action">
-		<button class="btn btn-success">Save</button>
+		<button class="btn btn-success">Add</button>
 	</div>
 </form>

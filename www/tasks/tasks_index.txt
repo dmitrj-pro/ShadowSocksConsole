@@ -90,17 +90,24 @@
 									
 								location.href = link;
 							}
+							var textLengthName = 0;
 							function changeNameFunc() {
-								var selectBox = document.getElementById("solidSelect");
-								var selectedValue = "";
-									if (selectBox.selectedIndex > 0)
-										selectBox.options[selectBox.selectedIndex].value;
-								
-								var link = "tasks.html?name=" + document.getElementById("name").value;
-								if (selectedValue.length > 0)
-									link = link + "&group=" + selectedValue.toString();
-									
-								location.href = link;
+								textLengthName = textLengthName + 1;
+								var cu = textLengthName;
+								setTimeout(() => {
+									if (cu == textLengthName) {
+										var selectBox = document.getElementById("solidSelect");
+										var selectedValue = "";
+											if (selectBox.selectedIndex > 0)
+												selectBox.options[selectBox.selectedIndex].value;
+										
+										var link = "tasks.html?name=" + document.getElementById("name").value;
+										if (selectedValue.length > 0)
+											link = link + "&group=" + selectedValue.toString();
+											
+										location.href = link;
+									}
+								}, 700);
 							}
 						</script>
 						
