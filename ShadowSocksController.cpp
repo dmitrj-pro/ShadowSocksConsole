@@ -7,6 +7,7 @@
 #include "WGetDownloader/Downloader.h"
 #include <_Driver/Files.h>
 #include <_Driver/Service.h>
+#include "VERSION.h"
 
 using __DP_LIB_NAMESPACE__::Path;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -71,7 +72,6 @@ String _ShadowSocksController::GetSourceConfig(const String & filename, const St
 		if (_all_file.size() == 0)
 			throw EXCEPTION("Password is invalid");
 	}
-	this->password = password;
 	return _all_file;
 }
 
@@ -103,8 +103,141 @@ bool _ShadowSocksController::isCreated(){
 	return p.IsFile();
 }
 
+void _ShadowSocksController::SaveBootConfig() {
+	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+	p = Path(p.GetFolder());
+	p.Append("boot.conf");
+
+	if (settings.autostart != AutoStartMode::OnCoreStart)  {
+		if (p.IsFile())
+			__DP_LIB_NAMESPACE__::RemoveFile(p.Get());
+		return;
+	}
+	String source = "";
+	// Готовим конфиг
+	{
+		ShadowSocksSettings sett = settings;
+		sett.servers.clear();
+		sett.tasks.clear();
+		sett.variables.clear();
+		sett.tun2socksConf.clear();
+		sett.runParams.clear();
+
+		sett.auto_check_mode = ShadowSocksSettings::AutoCheckingMode::Off;
+		sett.auto_check_interval_s = 0;
+		sett.web_session_timeout_m = 0;
+
+		for (const _Task * tk : settings.tasks)
+			if (tk->autostart) {
+				_Task * tm = tk->Copy([this](const String & txt) { return settings.replaceVariables(txt); });
+				tm->group = "";
+				_RunParams p = settings.findRunParamsbyName(tm->runParamsName);
+				if (p.isNull) {
+					DP_LOG_FATAL << "Finded task with incorrect run parametr";
+					continue;
+				}
+				sett.tasks.push_back(tm);
+				p.Copy(&p, [this](const String & txt) { return settings.replaceVariables(txt); });
+				sett.runParams.push_back(p);
+				if (p.tun2SocksName.size() > 0) {
+					sett.tun2socksConf.push_back(settings.findVPNbyName(p.tun2SocksName));
+				}
+				for (int srv : tm->servers_id ) {
+					_Server * sr = settings.findServerById(srv);
+					if (sr == nullptr) {
+						DP_LOG_FATAL << "Finded task with nullpointer server";
+						continue;
+					}
+					_Server * sr2 = sr->Copy([this](const String & txt) { return settings.replaceVariables(txt); });
+					sr2->group = "";
+					sett.servers.push_back(sr2);
+				}
+
+			}
+		source = sett.GetSource();
+	}
+	{
+		String password = p.Get() + SS_VERSION_HASHE;
+		__DP_LIB_NAMESPACE__::Crypt crypt = __DP_LIB_NAMESPACE__::Crypt(password, "SCH5");
+		source = crypt.Enc(source);
+
+		__DP_LIB_NAMESPACE__::Ofstream out;
+		out.open(p.Get());
+		if (out.fail()) {
+			DP_LOG_FATAL << "Fail to open boot config file to save";
+			return;
+		}
+		out << source;
+		out.flush();
+		out.close();
+		if (out.fail()){
+			DP_LOG_FATAL << "Fail to save boot config file";
+			return;
+		}
+	}
+}
+
+void _ShadowSocksController::StartOnBoot(OnShadowSocksError onCrash) {
+	{
+		Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+		p = Path(p.GetFolder());
+		p.Append("boot.conf");
+		if (!p.IsFile())
+			return;
+
+		String password = p.Get() + SS_VERSION_HASHE;
+		String source = "";
+		try {
+			source = GetSourceConfig(p.Get(), password);
+		} catch(__DP_LIB_NAMESPACE__::LineException & e) {
+			DP_LOG_FATAL << "Fail load boot config: " << e.toString();
+			return;
+		} catch (std::exception & e) {
+			DP_LOG_FATAL << "Fail load boot config: " << e.what();
+			return;
+		}
+		ShadowSocksSettings sett;
+		sett.Load(source);
+		if (!(((sett.autostart == AutoStartMode::On || sett.autostart == AutoStartMode::OnCoreStart) && (mode != 2))) )
+			return;
+		ShadowSocksSettings defaul_sett = this->settings;
+		this->settings = sett;
+		for (const _Task * tk : sett.tasks)
+			if (tk->autostart)
+				try{
+					ShadowSocksClient * shad = sett.makeServer(tk->id, SSClientFlags{});
+					clients_lock.lock();
+					try {
+						shad->SetOnCrash(onCrash);
+						shad -> Start(SSClientFlags{}, [this] (const String & name) {
+							makeNotifyTask(name, "Started");
+						});
+						DP_PRINT_TEXT("Task #" + toString(tk->id) + "started");
+
+						clients.push_back(__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient * >(tk->id, shad));
+					} catch (__DP_LIB_NAMESPACE__::LineException e) {
+						ExitStatus status;
+						status.code = ExitStatusCode::UnknowError;
+						status.str = e.toString();
+						onCrash(tk->name, status);
+						DP_LOG_FATAL << "Can't start task #" << toString(tk->name) << ": " << e.toString() << "\n";
+					} catch (...) { }
+
+					clients_lock.unlock();
+				}catch (__DP_LIB_NAMESPACE__::LineException e) {
+					ExitStatus status;
+					status.code = ExitStatusCode::UnknowError;
+					status.str = e.toString();
+					onCrash(tk->name, status);
+					DP_LOG_FATAL << "Can't start task #" << toString(tk->name) << ": " << e.toString() << "\n";
+				}
+		this->settings = defaul_sett;
+	}
+
+}
+
 void _ShadowSocksController::AutoStart(OnShadowSocksError onCrash) {
-	if (!((mode == 1) || (settings.autostart && (mode != 2))) )
+	if (!((mode == 1) || ((settings.autostart == AutoStartMode::On) && (mode != 2))) )
 		return;
 	for (const _Task * tk : settings.tasks)
 		if (tk->autostart)
@@ -242,6 +375,16 @@ void _ShadowSocksController::OpenConfig(const String & password) {
 		settings = ShadowSocksSettings();
 		settings.Load(GetSourceConfig(password));
 		this->password = password;
+
+		if (settings.enableLogging) {
+			__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+			logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+			logF.Append("LOGGING.txt");
+			if (!__DP_LIB_NAMESPACE__::log.FileIsOpen())
+				__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
+			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
+			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+		}
 	}
 }
 
@@ -295,6 +438,7 @@ void _ShadowSocksController::SaveConfig(const String & _res) {
 
 void _ShadowSocksController::SaveConfig() {
 	SaveConfig(settings.GetSource());
+	SaveBootConfig();
 }
 
 void _ShadowSocksController::ExportConfig(__DP_LIB_NAMESPACE__::Ostream & out, bool is_mobile, bool resolve_dns, const String & default_dns, const String & v2ray_path) {

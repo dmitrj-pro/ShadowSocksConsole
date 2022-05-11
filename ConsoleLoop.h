@@ -552,7 +552,10 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 				cout << "Edit settings ";
 				auto & conf = ctrl.getConfig();
 
-				MiCro_t("autostart", autostart, bool);
+				if (parametr == "autostart") {
+					conf.autostart = str_to_AutoStartMode(value);
+					cout << "autostart" << " = " << AutoStartMode_to_str(conf.autostart) <<"\n";
+				}
 				MiCro_s("ss_path", shadowSocksPath);
 				MiCro_s("v2ray_path", v2rayPluginPath);
 				MiCro_s("tun2socks_path", tun2socksPath);
@@ -791,7 +794,26 @@ void ConsoleLooper<OutStream, InStream>::EditTask(ParamsReader & arg) {
 }
 
 template <typename OutStream, typename InStream>
-void ConsoleLooper<OutStream, InStream>::GetSource(ParamsReader &) {
+void ConsoleLooper<OutStream, InStream>::GetSource(ParamsReader & arg) {
+	if (!arg.isEmpty()) {
+		String cmd = arg.read("config");
+		if (HELP_COND) {
+			cout << "SOURCE boot\n";//
+			cout << "SOURCE\n";
+			return;
+		}
+		if (cmd == "boot") {
+			Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+			p = Path(p.GetFolder());
+			p.Append("boot.conf");
+			if (!p.IsFile())
+				return;
+			String password = p.Get() + SS_VERSION_HASHE;
+			cout << ctrl.GetSourceConfig(p.Get(), password);
+			return;
+		}
+
+	}
 	cout << ctrl.GetSourceConfig() << "\n";
 }
 
@@ -801,7 +823,7 @@ void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	#define SHOWSETTINGS(NAME, VAL) cout << std::setw(20) << NAME << std::setw(20) << VAL << "\n"
 	SHOWSETTINGS("Name", "Value");
 	cout << "----------------------------\n";
-	SHOWSETTINGS("Enable autostart", conf.autostart);
+	SHOWSETTINGS("Enable autostart", AutoStartMode_to_str(conf.autostart));
 	SHOWSETTINGS("ShadowSocks Path", conf.shadowSocksPath);
 	SHOWSETTINGS("ShadowSocksRust Path", conf.shadowSocksPathRust);
 	SHOWSETTINGS("V2Ray Path", conf.v2rayPluginPath);
@@ -815,6 +837,7 @@ void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	SHOWSETTINGS("Deep check servers before start task", conf.enableDeepCheckServer);
 	SHOWSETTINGS("Auto detect Tap interface", conf.autoDetectTunInterface);
 	SHOWSETTINGS("Udp Timeout (s)", conf.udpTimeout);
+	SHOWSETTINGS("Web session timeout (m)", conf.web_session_timeout_m);
 	SHOWSETTINGS("Ignore check result", conf.IGNORECHECKSERVER);
 	SHOWSETTINGS("Bootstrap DNS", conf.bootstrapDNS);
 	SHOWSETTINGS("Auto check servers", ShadowSocksSettings::auto_to_str(conf.auto_check_mode));
@@ -840,8 +863,10 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 
 	cmd = arg.read("V2Ray Path", conf.v2rayPluginPath);
 	if (cmd.size() > 1) conf.v2rayPluginPath = cmd;
-	cmd = arg.read("AutoStart", toString(conf.autostart));
-	if (cmd.size() > 0) conf.autostart = parse<bool>(cmd);
+
+	cmd = arg.read("AutoStart", AutoStartMode_to_str(conf.autostart));
+	if (cmd.size() > 0) conf.autostart = str_to_AutoStartMode(cmd);
+
 	cmd = arg.read("Tun2Socks", toString(conf.tun2socksPath));
 	if (cmd.size() > 0) conf.tun2socksPath = cmd;
 	cmd = arg.read("Dns2Socks", toString(conf.dns2socksPath));
@@ -855,6 +880,9 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 
 	cmd = arg.read("Bootstrap DNS", conf.bootstrapDNS);
 	if (cmd.size() > 1) conf.bootstrapDNS = cmd;
+
+	cmd = arg.read("Web session timeout (m)", toString(conf.web_session_timeout_m));
+	if (cmd.size() > 0) conf.web_session_timeout_m = parse<UInt>(cmd);
 
 	cmd = arg.read("Udp Timeout (s)", toString(conf.udpTimeout));
 	if (cmd.size() > 0) conf.udpTimeout = parse<UInt>(cmd);
@@ -1003,7 +1031,7 @@ void ConsoleLooper<OutStream, InStream>::Enable(ParamsReader &arg) {
 		return;
 	}
 	if (cmd == "autostart") {
-		this->ctrl.getConfig().autostart = true;
+		this->ctrl.getConfig().autostart = AutoStartMode::On;
 		ctrl.SaveConfig();
 		return;
 	}
@@ -1024,7 +1052,7 @@ void ConsoleLooper<OutStream, InStream>::Disable(ParamsReader &arg) {
 		return;
 	}
 	if (cmd == "autostart") {
-		this->ctrl.getConfig().autostart = false;
+		this->ctrl.getConfig().autostart = AutoStartMode::Off;
 		ctrl.SaveConfig();
 		return;
 	}
@@ -1437,14 +1465,6 @@ void ConsoleLooper<OutStream, InStream>::Loop() {
 	}
 	if (cin.eof() || __DP_LIB_NAMESPACE__::ServiceSinglton::Get().NeedToExit())
 		return;
-	if (ctrl.getConfig().enableLogging) {
-		__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-		logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
-		logF.Append("LOGGING.txt");
-		__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
-		__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
-		__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
-	}
 
 	if (ctrl.CheckInstall()) {
 		auto funcCrash = [this] (const String & name, const ExitStatus & status) {

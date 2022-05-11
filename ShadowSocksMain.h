@@ -249,10 +249,28 @@ struct SSClientFlags{
 	_RunParams::ShadowSocksType type = _RunParams::ShadowSocksType::None;
 };
 
+// OnCoreStart - Нужно запустить задания при запуске ядра
+// BootedCore - Загружен нешифрованный конфиг, а основной не загружен. (идет запуск на уровне ядра)
+enum class AutoStartMode { Off, On, OnCoreStart};
+inline String AutoStartMode_to_str(AutoStartMode v) {
+	switch (v) {
+		case AutoStartMode::Off: return "off";
+		case AutoStartMode::On: return "on";
+		case AutoStartMode::OnCoreStart: return "core";
+		default: return "off";
+	}
+}
+inline AutoStartMode str_to_AutoStartMode(const String & val) {
+	if (val == "off") return AutoStartMode::Off;
+	if (val == "on") return AutoStartMode::On;
+	if (val == "core") return AutoStartMode::OnCoreStart;
+	return AutoStartMode::Off;
+}
+
 struct ShadowSocksSettings{
 	List<_Server*> servers;
 	List<_Task * > tasks;
-	bool autostart = false;
+	AutoStartMode autostart = AutoStartMode::Off;
 	String shadowSocksPath = "${INSTALLED}/ss";
 	String shadowSocksPathRust = "${INSTALLED}/ss-rust";
 	_RunParams::ShadowSocksType shadowSocksType = _RunParams::ShadowSocksType::GO;
@@ -269,6 +287,7 @@ struct ShadowSocksSettings{
 	bool hideDNS2Socks = true;
 	Map<String, String> variables;
 	UInt udpTimeout = 600;
+	UInt web_session_timeout_m = 60;
 	List<Tun2SocksConfig> tun2socksConf;
 	List<_RunParams> runParams;
 	bool IGNORECHECKSERVER = false;

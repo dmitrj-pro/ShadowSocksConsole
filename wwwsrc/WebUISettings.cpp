@@ -3,6 +3,8 @@
 #include <Converter/Converter.h>
 #include "../ShadowSocksController.h"
 #include <string.h>
+#include <_Driver/ServiceMain.h>
+#include <_Driver/Files.h>
 
 using __DP_LIB_NAMESPACE__::OStrStream;
 using __DP_LIB_NAMESPACE__::toString;
@@ -15,7 +17,7 @@ Request WebUI::processGetEditSettings(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	List<String> stringParams = List<String> ({"shadowSocksPath", "shadowSocksPathRust", "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
-	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s"});
+	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s", "web_session_timeout_m"});
 
 	String params = req->get["edit"];
 	Request resp = makeRequest();
@@ -51,6 +53,7 @@ Request WebUI::processGetEditSettings(Request req) {
 		auto & set = ShadowSocksController::Get().getConfig();
 
 		if (params == "udpTimeout") { val = toString(set.udpTimeout); var = "Udp Timeout (s)"; min = 0;}
+		if (params == "web_session_timeout_m") { val = toString(set.web_session_timeout_m); var = "Web session timeout (m)"; min = 0; }
 		if (params == "auto_check_interval_s") { val = toString(set.auto_check_interval_s); var = "Auto check server interval (s)"; min = 0; }
 
 		String html = makePage("Edit setting", "settings/edit_uint.txt", List<String>({ params, var, toString(min), toString(max), val }));
@@ -68,15 +71,21 @@ Request WebUI::processGetEditSettings(Request req) {
 		if (params == "autostart") {
 			var = "Enable autostart";
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
-																				"true",
-																				set.autostart ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"off",
+																				(set.autostart == AutoStartMode::Off) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"on",
+																				set.autostart == AutoStartMode::On ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
 																				"Enable"
 																		  }));
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
-																				"false",
-																				(!set.autostart) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
-																				"Disable"
+																				"core",
+																				set.autostart == AutoStartMode::OnCoreStart ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Start on run core (low encryption mode for running parametr)"
 																		  }));
+
 		}
 		if (params == "enableLogging") {
 			var = "Enable logging file";
@@ -232,7 +241,7 @@ Request WebUI::processPostEditSettings(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	List<String> stringParams = List<String> ({"shadowSocksPath","shadowSocksPathRust" "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
-	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s"});
+	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s", "web_session_timeout_m"});
 
 	String params = req->get["edit"];
 	String value = req->post["value"].value;
@@ -263,6 +272,7 @@ Request WebUI::processPostEditSettings(Request req) {
 		auto & set = ShadowSocksController::Get().getConfig();
 
 		if (params == "udpTimeout") { val = &set.udpTimeout; }
+		if (params == "web_session_timeout_m") { val = &set.web_session_timeout_m; }
 		if (params == "auto_check_interval_s") { val = &set.auto_check_interval_s;}
 
 		if (val == nullptr) {
@@ -274,7 +284,8 @@ Request WebUI::processPostEditSettings(Request req) {
 
 	if (params == "autostart") {
 		auto & set = ShadowSocksController::Get().getConfig();
-		set.autostart = value == "true" ? true : false;
+		set.autostart = str_to_AutoStartMode(value);
+		ShadowSocksController::Get().SaveBootConfig();
 	}
 	if (params == "defaultShadowSocks") {
 		auto & set = ShadowSocksController::Get().getConfig();
@@ -283,6 +294,20 @@ Request WebUI::processPostEditSettings(Request req) {
 	if (params == "enableLogging") {
 		auto & set = ShadowSocksController::Get().getConfig();
 		set.enableLogging = value == "true" ? true : false;
+		__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+		logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+		logF.Append("LOGGING.txt");
+		if (set.enableLogging) {
+			if (!__DP_LIB_NAMESPACE__::log.FileIsOpen())
+				__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
+			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
+			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+		} else {
+			__DP_LIB_NAMESPACE__::log.FileClose();
+			__DP_LIB_NAMESPACE__::RemoveFile(logF.Get());
+			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Info);
+			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPFatal);
+		}
 	}
 	if (params == "autoDetectTunInterface") {
 		auto & set = ShadowSocksController::Get().getConfig();
@@ -321,8 +346,13 @@ Request WebUI::processGetSettings(Request) {
 	const auto & c = ShadowSocksController::Get().getConfig();
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Enable autostart",
-															toString(c.autostart),
+															AutoStartMode_to_str(c.autostart),
 															"autostart"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Web session timeout (m)",
+															toString(c.web_session_timeout_m),
+															"web_session_timeout_m"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"ShadowSocks path",
@@ -340,19 +370,14 @@ Request WebUI::processGetSettings(Request) {
 															"defaultShadowSocks"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
+															"WGet path",
+															toString(c.wgetPath),
+															"wgetPath"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
 															"Use system wget (Linux)",
 															toString(c.fixLinuxWgetPath),
 															"fixLinuxWgetPath"
-													  }));
-	out << findFillText("settings/settings_item.txt", List<String>({
-															"Deep check servers before start task",
-															toString(c.enableDeepCheckServer),
-															"enableDeepCheckServer"
-													  }));
-	out << findFillText("settings/settings_item.txt", List<String>({
-															"Auto detect Tap interface",
-															toString(c.autoDetectTunInterface),
-															"autoDetectTunInterface"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"V2Ray path",
@@ -370,14 +395,21 @@ Request WebUI::processGetSettings(Request) {
 															"dns2socksPath"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
-															"WGet path",
-															toString(c.wgetPath),
-															"wgetPath"
+															"Hide Dns2Socks",
+															toString(c.hideDNS2Socks),
+															"hideDNS2Socks"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Temp path",
 															toString(c.tempPath),
 															"tempPath"
+													  }));
+
+
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Auto detect Tap interface",
+															toString(c.autoDetectTunInterface),
+															"autoDetectTunInterface"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Enable Logging",
@@ -385,14 +417,14 @@ Request WebUI::processGetSettings(Request) {
 															"enableLogging"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
-															"Hide Dns2Socks",
-															toString(c.hideDNS2Socks),
-															"hideDNS2Socks"
-													  }));
-	out << findFillText("settings/settings_item.txt", List<String>({
 															"UDP Timeout",
 															toString(c.udpTimeout),
 															"udpTimeout"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Deep check servers before start task",
+															toString(c.enableDeepCheckServer),
+															"enableDeepCheckServer"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Ignore result check server",

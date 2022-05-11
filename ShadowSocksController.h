@@ -72,6 +72,8 @@ class _ShadowSocksController {
 		inline void MakeExit() { Stop(); _make_exit(); }
 		inline void SetExitFinc(std::function<void()> func) { _make_exit = func; }
 		void AutoStart(OnShadowSocksError onCrash);
+		void StartOnBoot(OnShadowSocksError onCrash);
+		void SaveBootConfig();
 		ShadowSocksClient * StartById(int id, OnShadowSocksRunned onSuccess, OnShadowSocksError onCrash, SSClientFlags flags);
 		ShadowSocksClient * StartByName(const String & name, OnShadowSocksRunned onSuccess, OnShadowSocksError onCrash, SSClientFlags flags);
 		void StopByName(const String & name);

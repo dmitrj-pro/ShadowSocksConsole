@@ -33,7 +33,7 @@ char * SocketReader::ReadN(UInt size) {
 }
 unsigned int SocketReader::ReadN(char * res, unsigned int size) {
 	if (bufferSize > 0) {
-		if ((bufferSize - bufferPos) > size) {
+		if ((bufferSize - bufferPos) >= size) {
 			strncpy(res, buffer + bufferPos, size);
 			bufferPos += size;
 			return size;
@@ -67,7 +67,8 @@ void tcpLoop(SocketReader & client,  TCPClient * target) {
 	UInt buffer_size = BUFFER_SIZE;
 	char c[BUFFER_SIZE];
 	if (client.getBufferSize() > 0) {
-		unsigned int readed = client.ReadN(c, buffer_size);
+		unsigned int readed = client.ReadN(c, client.getBufferSize());
+		c[readed] = 0;
 		DP_LOG_TRACE << client.ip() << ":" << client.port() << " => " << "target " << readed << " bytes";
 		target->Send(c, readed);
 	}

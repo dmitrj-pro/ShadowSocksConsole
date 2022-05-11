@@ -256,6 +256,8 @@ Request WebUI::processPostLogin(Request req) {
 			DP_LOG_FATAL << error.str();
 			notifyUser(cookie, error.str());
 		};
+		// Если количество серверов до расшифровки конфига и после не совпадают
+		// Т.Е. при первой расшифровки конфига
 		if ( count != ShadowSocksController::Get().getConfig().servers.size()) {
 			ShadowSocksController::Get().AutoStart(funcCrash);
 			ShadowSocksController::Get().startCheckerThread();
@@ -370,10 +372,14 @@ Request WebUI::processPostExport(Request req) {
 }
 
 void WebUI::logoutOldUser() {
+	UInt time_logout = ShadowSocksController::Get().getConfig().web_session_timeout_m;
+	if (time_logout == 0)
+		return;
+
 	cookies_lock.lock();
 	for (auto it = cookies.begin(); it != cookies.end(); it++) {
 		unsigned int running_time = time(nullptr) - it->started;
-		if (running_time > (60 * 60)) {
+		if (running_time > (time_logout * 60)) {
 			if (it->consoleLooper != nullptr) {
 				ConsoleSession * ss = (ConsoleSession *) it->consoleLooper;
 				delete ss->looper;

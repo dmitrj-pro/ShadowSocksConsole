@@ -61,6 +61,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 
 		void serviceMain() {
 			DP_LOG_INFO << "Start " << getVersion() << " as service";
+			ShadowSocksController::Get().StartOnBoot([] (const String &, const ExitStatus &) { });
 			if (host_web.port > 0) {
 				if (!__DP_LIB_NAMESPACE__::TCPServer::portIsAllow(host_web.host, host_web.port)) {
 					this->SetExitCode(2);
@@ -236,6 +237,7 @@ void ShadowSocksMain::consoleMain() {
 			webui = SmartPtr<WebUI>(new WebUI(host_web.host, host_web.port));
 			webui->start();
 		}
+		ShadowSocksController::Get().StartOnBoot([] (const String &, const ExitStatus &) { });
 
 		auto looper = makeLooper(std::cout, std::cin);
 		looper->Loop();
@@ -854,7 +856,7 @@ String ShadowSocksSettings::GetSource() {
 
 	{
 		String key = "System.Settings.";
-		SetType(key + "autostart", this->autostart);
+		Set(key + "autostart", AutoStartMode_to_str(this->autostart));
 		Set(key + "ShadowSocksPath", this->shadowSocksPath);
 		Set(key + "ShadowSocksPathRust", this->shadowSocksPathRust);
 		Set(key + "ShadowSocksType", SSTtypetoString(this->shadowSocksType));
@@ -864,6 +866,7 @@ String ShadowSocksSettings::GetSource() {
 		Set(key + "WGetPath", this->wgetPath);
 		Set(key + "tempPath", this->tempPath);
 		SetType(key + "UDPTimeout", this->udpTimeout);
+		SetType(key + "WebSessionTimeout", this->web_session_timeout_m);
 		SetType(key + "ignoreCheck", this->IGNORECHECKSERVER);
 		SetType(key + "hideDNS2Socks", this->hideDNS2Socks);
 		SetType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath);
@@ -1049,7 +1052,10 @@ void ShadowSocksSettings::Load(const String & text) {
 
 	{
 		String key = "System.Settings.";
-		ReadNType(key + "autostart", this->autostart, bool);
+
+		String tmp = "off";
+		ReadN(key + "autostart", tmp);
+		this->autostart = str_to_AutoStartMode(tmp);
 		ReadN(key + "ShadowSocksPath", this->shadowSocksPath);
 		ReadN(key + "ShadowSocksPathRust", this->shadowSocksPathRust);
 		{
@@ -1064,6 +1070,7 @@ void ShadowSocksSettings::Load(const String & text) {
 		ReadN(key + "WGetPath", this->wgetPath);
 		ReadN(key + "tempPath", this->tempPath);
 		ReadNType(key + "UDPTimeout", this->udpTimeout, UInt);
+		ReadNType(key + "WebSessionTimeout", this->web_session_timeout_m, UInt);
 		ReadNType(key + "ignoreCheck", this->IGNORECHECKSERVER, bool);
 		ReadNType(key + "hideDNS2Socks", this->hideDNS2Socks, bool);
 		ReadNType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath, bool);
@@ -1071,7 +1078,7 @@ void ShadowSocksSettings::Load(const String & text) {
 		ReadNType(key + "enableDeepCheckServer", this->enableDeepCheckServer, bool);
 		ReadNType(key + "enableLogging", this->enableLogging, bool);
 		ReadN(key + "BootstrapDNS", this->bootstrapDNS);
-		String tmp = "Off";
+		tmp = "Off";
 		ReadN(key + "AutoCheckingMode", tmp);
 		this->auto_check_mode = ShadowSocksSettings::str_to_auto(tmp);
 		ReadNType(key + "AutoCheckingIntervalS", this->auto_check_interval_s, UInt);
