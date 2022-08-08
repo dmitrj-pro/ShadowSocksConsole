@@ -19,6 +19,7 @@ struct Tun2Socks {
 		String proxyServer;
 		UInt proxyPort;
 		String udpTimeout = "1m0s";
+		bool enable_udp = true;
 
 		bool & _is_exit;
 		__DP_LIB_NAMESPACE__::Thread * deleteDefault = nullptr;
@@ -55,81 +56,3 @@ struct Tun2Socks {
 };
 
 
-class WordReader{
-	private:
-		String text;
-		unsigned int pos = 0;
-		List<char> delimers;
-	public:
-		WordReader(const String & text, const List<char> & delimers) : text(text), pos(0), delimers(delimers) {}
-		inline bool isEnd() const { return pos >= text.size(); }
-		String read() {
-			while (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n')
-				pos ++;
-			String res = "";
-			char c = text[pos];
-			if (__DP_LIB_NAMESPACE__::ConteinsElement(delimers, c)) {
-				pos++;
-				//res += c;
-				return res;
-			}
-			while (!(text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n')) {
-				if (__DP_LIB_NAMESPACE__::ConteinsElement(delimers, c)) {
-					break;
-				}
-				res += c;
-				pos++;
-				if (isEnd())
-					break;
-				c = text[pos];
-			}
-			return res;
-		}
-};
-
-class LiteralReader{
-	private:
-		WordReader reader;
-		static List<char> delimers;
-	public:
-		LiteralReader(const String & str) : reader(WordReader(str, delimers)) {}
-		LiteralReader(const String & str, const List<char> & delimer) : reader(WordReader(str, delimer)) {}
-		inline bool isEnd() const { return reader.isEnd(); }
-		List<String> read() {
-			List<String> res;
-			bool started = false;
-			while (true) {
-				if (reader.isEnd())
-					return List<String>();
-				String l = reader.read();
-				if (l.size() == 0)
-					continue;
-				if (started && l == "]") {
-					started = false;
-					break;
-				}
-				if (l == "[") {
-					started = true;
-					continue;
-				}
-				if (started && l == ",") {
-					continue;
-				}
-				res.push_back(l);
-				if (!started)
-					break;
-			}
-			return res;
-		}
-		static List<List<String>> readAllLiterals(const String & str) {
-			LiteralReader reader(str);
-			List<List<String>> res;
-			while (!reader.isEnd()) {
-				auto tmp = reader.read();
-				if (tmp.size() == 0)
-					return res;
-				res.push_back(tmp);
-			}
-			return res;
-		}
-};

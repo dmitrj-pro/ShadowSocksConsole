@@ -7,10 +7,19 @@ THROW=Dmitrj PRO Lib is not set. Install this lib and set in PMake.
 THROW=Dmitrj PRO Lib is not set. Install this lib and set in PMake.
 []
 
+[!DP_LIB_NETWORK_LIB]
+THROW=Dmitrj PRO Lib is not set or it is old version. Install this lib and set in PMake.
+[]
+[!DP_LIB_ADDONS_LIB]
+THROW=Dmitrj PRO Lib is not set, or it is old version or addons is not compiled. Install this lib and set in PMake.
+[]
+
 CXXFLAGS=-std=c++11
 
 INCLUDE = DP_LIB
 LIBS = DP_LIB_LIB
+LIBS = DP_LIB_NETWORK_LIB
+LIBS = DP_LIB_ADDONS_LIB
 
 [WINDOWS]
 CXXFLAGS=-DDP_WIN
@@ -62,45 +71,10 @@ SOURCE = ./wwwsrc/WebUISettings.cpp
 SOURCE = ./wwwsrc/WebUITasks.cpp
 SOURCE = ./wwwsrc/WebUIVPN.cpp
 SOURCE = ./wwwsrc/WebUIRuns.cpp
-HEADER=sha1.hpp
-SOURCE=sha1.cpp
 HEADER = ./VERSION.h
 
-HEADER = ./WGetDownloader/Downloader.h
-SOURCE = ./WGetDownloader/Downloader.cpp
-SOURCE = ./WGetDownloader/libproxy/Chain.cpp
-HEADER = ./WGetDownloader/libproxy/Chain.h
-
-SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParser.cpp
-HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParser.h
-SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserHttp.cpp
-HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserHttp.h
-SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserMultiplex.cpp
-HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserMultiplex.h
-SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserSocks5.cpp
-HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserSocks5.h
-SOURCE = ./WGetDownloader/libproxy/ProtoParsers/SocketParserTunnel.cpp
-HEADER = ./WGetDownloader/libproxy/ProtoParsers/SocketParserTunnel.h
-
-SOURCE = ./WGetDownloader/libproxy/Connectors/Connector.cpp
-HEADER = ./WGetDownloader/libproxy/Connectors/Connector.h
-SOURCE = ./WGetDownloader/libproxy/Connectors/ConnectorDirect.cpp
-HEADER = ./WGetDownloader/libproxy/Connectors/ConnectorDirect.h
-SOURCE = ./WGetDownloader/libproxy/Connectors/ConnectorHttpProxy.cpp
-HEADER = ./WGetDownloader/libproxy/Connectors/ConnectorHttpProxy.h
-SOURCE = ./WGetDownloader/libproxy/Connectors/ConnectorSocks.cpp
-HEADER = ./WGetDownloader/libproxy/Connectors/ConnectorSocks.h
 HEADER = ./www/textfill.h
 SOURCE = ./www/textfill.cpp
-
-HEADER = ${DP_LIB}/Addon/httpsrv/HttpHostRouter.h
-SOURCE = ${DP_LIB}/Addon/httpsrv/HttpHostRouter.cpp
-HEADER = ${DP_LIB}/Addon/httpsrv/HttpPathRouter.h
-SOURCE = ${DP_LIB}/Addon/httpsrv/HttpPathRouter.cpp
-HEADER = ${DP_LIB}/Addon/httpsrv/HttpRequest.h
-SOURCE = ${DP_LIB}/Addon/httpsrv/HttpRequest.cpp
-HEADER = ${DP_LIB}/Addon/httpsrv/HttpServer.h
-SOURCE = ${DP_LIB}/Addon/httpsrv/HttpServer.cpp
 
 
 {Generate www}

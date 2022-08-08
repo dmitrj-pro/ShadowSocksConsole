@@ -4,10 +4,13 @@
 #include <Types/Exception.h>
 #include <Crypt/Crypt.h>
 #include <_Driver/ServiceMain.h>
-#include "WGetDownloader/Downloader.h"
+#include <Addon/WGetDownloader.h>
 #include <_Driver/Files.h>
 #include <_Driver/Service.h>
 #include "VERSION.h"
+#include <Addon/libproxy/Connectors/ConnectorSocks.h>
+#include <Addon/libproxy/Connectors/ConnectorDirect.h>
+#include <Addon/libproxy/Chain.h>
 
 using __DP_LIB_NAMESPACE__::Path;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -22,11 +25,14 @@ void _ShadowSocksController::Stop() {
 		} catch(...) { }
 	clients.clear();
 	clients_lock.unlock();
+    DP_LOG_INFO << "All clients stoped";
 
 	if (checkerThread != nullptr) {
+        DP_LOG_INFO << "Checker will be stop";
 		checkerThread->join();
 		delete checkerThread;
 		checkerThread = nullptr;
+        DP_LOG_INFO << "Checker stoped";
 	}
 }
 
@@ -47,15 +53,13 @@ String ReadAllFile(const String & file) {
 }
 
 String _ShadowSocksController::GetConfigPath() {
-	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-	p = Path(p.GetFolder());
+	Path p = Path{getWritebleDirectory()};
 	p.Append("config.conf");
 	return p.Get();
 }
 
 String _ShadowSocksController::GetCashePath() {
-	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-	p = Path(p.GetFolder());
+	Path p = Path{getWritebleDirectory()};
 	p.Append("cashe.conf");
 	return p.Get();
 }
@@ -104,8 +108,7 @@ bool _ShadowSocksController::isCreated(){
 }
 
 void _ShadowSocksController::SaveBootConfig() {
-	Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-	p = Path(p.GetFolder());
+	Path p = Path{getWritebleDirectory()};
 	p.Append("boot.conf");
 
 	if (settings.autostart != AutoStartMode::OnCoreStart)  {
@@ -123,7 +126,7 @@ void _ShadowSocksController::SaveBootConfig() {
 		sett.tun2socksConf.clear();
 		sett.runParams.clear();
 
-		sett.auto_check_mode = ShadowSocksSettings::AutoCheckingMode::Off;
+		sett.auto_check_mode = AutoCheckingMode::Off;
 		sett.auto_check_interval_s = 0;
 		sett.web_session_timeout_m = 0;
 
@@ -177,18 +180,19 @@ void _ShadowSocksController::SaveBootConfig() {
 	}
 }
 
-void _ShadowSocksController::StartOnBoot(OnShadowSocksError onCrash) {
+void _ShadowSocksController::StartOnBoot() {
 	{
-		Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-		p = Path(p.GetFolder());
+		Path p = Path{getWritebleDirectory()};
 		p.Append("boot.conf");
 		if (!p.IsFile())
 			return;
 
 		String password = p.Get() + SS_VERSION_HASHE;
 		String source = "";
+		ShadowSocksSettings sett;
 		try {
 			source = GetSourceConfig(p.Get(), password);
+			sett.Load(source);
 		} catch(__DP_LIB_NAMESPACE__::LineException & e) {
 			DP_LOG_FATAL << "Fail load boot config: " << e.toString();
 			return;
@@ -196,14 +200,20 @@ void _ShadowSocksController::StartOnBoot(OnShadowSocksError onCrash) {
 			DP_LOG_FATAL << "Fail load boot config: " << e.what();
 			return;
 		}
-		ShadowSocksSettings sett;
-		sett.Load(source);
+
 		if (!(((sett.autostart == AutoStartMode::On || sett.autostart == AutoStartMode::OnCoreStart) && (mode != 2))) )
 			return;
 		ShadowSocksSettings defaul_sett = this->settings;
 		this->settings = sett;
-		for (const _Task * tk : sett.tasks)
-			if (tk->autostart)
+		for (const _Task * tk : sett.tasks) {
+			unsigned int ctry = 0;
+			DP_LOG_INFO << "Try start task " << tk->name << " on boot";
+			while (tk->autostart && ctry < sett.countRestartAutostarted) {
+				auto onCrash = [&ctry](const String & , const ExitStatus &) {
+					ctry ++;
+					std::this_thread::sleep_for(std::chrono::seconds(20));
+				};
+
 				try{
 					ShadowSocksClient * shad = sett.makeServer(tk->id, SSClientFlags{});
 					clients_lock.lock();
@@ -231,6 +241,8 @@ void _ShadowSocksController::StartOnBoot(OnShadowSocksError onCrash) {
 					onCrash(tk->name, status);
 					DP_LOG_FATAL << "Can't start task #" << toString(tk->name) << ": " << e.toString() << "\n";
 				}
+			}
+		}
 		this->settings = defaul_sett;
 	}
 
@@ -255,7 +267,7 @@ void _ShadowSocksController::AutoStart(OnShadowSocksError onCrash) {
 }
 
 ShadowSocksClient * _ShadowSocksController::StartById(int id, OnShadowSocksRunned onSuccess, OnShadowSocksError onCrash, SSClientFlags flags) {
-	DP_LOG_INFO << "Try start task #" << id << " with flags:";
+	DP_LOG_DEBUG << "Try start task #" << id << " with flags:";
 	DP_PRINT_VAL_0(flags.runVPN);
 	DP_PRINT_VAL_0(flags.vpnName);
 	DP_PRINT_VAL_0(flags.port);
@@ -264,22 +276,16 @@ ShadowSocksClient * _ShadowSocksController::StartById(int id, OnShadowSocksRunne
 	DP_PRINT_VAL_0(flags.sysproxy_s);
 	DP_PRINT_VAL_0(flags.deepCheck);
 	DP_PRINT_VAL_0(flags.multimode);
+	DP_PRINT_VAL_0(flags.disableTuns);
 	DP_PRINT_VAL_0(SSTtypetoString(flags.type));
 
 	ShadowSocksClient * shad = settings.makeServer(id, flags);
 	clients_lock.lock();
-	try {
-		shad->SetOnCrash(onCrash);
-		shad -> Start(flags, onSuccess);
-		DP_PRINT_TEXT("Task #" + toString(id) + "started");
-
-		clients.push_back(__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient * >(id, shad));
-	} catch (...) {
-		clients_lock.unlock();
-		throw;
-	}
-
+	clients.push_back(__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient * >(id, shad));
 	clients_lock.unlock();
+	shad->SetOnCrash(onCrash);
+	shad -> Start(flags, onSuccess);
+	DP_PRINT_TEXT("Task #" + toString(id) + "started");
 	return shad;
 }
 
@@ -298,7 +304,7 @@ bool _ShadowSocksController::isRunning(int id) {
 }
 
 void _ShadowSocksController::StopByName(const String & name){
-	DP_LOG_DEBUG << "Try stop task" << name;
+	DP_LOG_DEBUG << "Try stop task " << name;
 	clients_lock.lock();
 	for (auto it = clients.begin(); it != clients.end(); it++) {
         if (it->second->getTask() == nullptr) {
@@ -367,6 +373,23 @@ void _ShadowSocksController::StopByClient(ShadowSocksClient * client) {
 	clients_lock.unlock();
 }
 
+void _ShadowSocksController::OpenLogFile() {
+	__DP_LIB_NAMESPACE__::Path logF {getWritebleDirectory()};
+	logF.Append("LOGGING.txt");
+	__DP_LIB_NAMESPACE__::global_config.addLogFile(logF);
+	__DP_LIB_NAMESPACE__::global_config.log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
+	__DP_LIB_NAMESPACE__::global_config.log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+}
+
+void _ShadowSocksController::CloseLogFile() {
+	__DP_LIB_NAMESPACE__::Path logF {getWritebleDirectory()};
+	logF.Append("LOGGING.txt");
+	__DP_LIB_NAMESPACE__::global_config.closeLogFile(logF);
+	__DP_LIB_NAMESPACE__::RemoveFile(logF.Get());
+	__DP_LIB_NAMESPACE__::global_config.log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Info);
+	__DP_LIB_NAMESPACE__::global_config.log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPFatal);
+}
+
 void _ShadowSocksController::OpenConfig(const String & password) {
 	if (settings.tasks.size() > 0) {
 		ShadowSocksSettings tmp;
@@ -377,14 +400,12 @@ void _ShadowSocksController::OpenConfig(const String & password) {
 		this->password = password;
 
 		if (settings.enableLogging) {
-			__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-			logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
-			logF.Append("LOGGING.txt");
-			if (!__DP_LIB_NAMESPACE__::log.FileIsOpen())
-				__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
-			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
-			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+			OpenLogFile();
 		}
+		if (settings.bootstrapDNS.size() > 4) {
+			__DP_LIB_NAMESPACE__::global_config.setDNS(settings.bootstrapDNS);
+		}
+
 	}
 }
 
@@ -401,7 +422,7 @@ void _ShadowSocksController::OpenCashe() {
 }
 
 void _ShadowSocksController::SaveCashe() {
-	if (getConfig().auto_check_mode != ShadowSocksSettings::AutoCheckingMode::Off) {
+	if (getConfig().auto_check_mode != AutoCheckingMode::Off) {
 		String res = settings.GetSourceCashe();
 		if (password.size() > 1) {
 			__DP_LIB_NAMESPACE__::Crypt crypt = __DP_LIB_NAMESPACE__::Crypt(password, "SCH5");
@@ -462,9 +483,6 @@ void _ShadowSocksController::ExportConfig(__DP_LIB_NAMESPACE__::Ostream & out, b
 				srv_num ++;
 				for (_Server * sr : config.servers)
 					if (sr->id == id) {
-						if (config.bootstrapDNS.size() > 4)
-							__DP_LIB_NAMESPACE__::setGlobalDNS(config.bootstrapDNS);
-
 						String _host = config.replaceVariables(sr->host);
 						__DP_LIB_NAMESPACE__::List<String> ip_addrs;
 						if (resolve_dns)
@@ -625,7 +643,7 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 		}
 	}
 
-	DP_LOG_DEBUG << "Checking task " << task->name << " (" << srv->name << ") mode " << ShadowSocksSettings::auto_to_str(args.auto_check_mode);
+	DP_LOG_DEBUG << "Checking task " << task->name << " (" << srv->name << ") mode " << AutoCheckingMode_to_str(args.auto_check_mode);
 	srv->check_result = _Server::ResultCheck();
 
 	static unsigned short _socks5_port = 32000;
@@ -686,7 +704,10 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 
 	SSClientFlags flags;
 	flags.port = socks5_port;
-	flags.http_port = http_port;
+	if (args.auto_check_mode == AutoCheckingMode::Work)
+		flags.http_port = 0;
+	else
+		flags.http_port = http_port;
 	flags.runVPN = false;
 	flags.vpnName = "";
 	flags.sysproxy_s = SSClientFlagsBoolStatus::False;
@@ -694,6 +715,7 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 	flags.deepCheck = false;
 	flags.server_name = srv->name;
 	flags.deepCheck = false;
+	flags.disableTuns = true;
 	flags.listen_host = args.defaultHost;
 	auto onCrash = [srv](const String &, const ExitStatus & status) {
 		srv->check_result.isRun = false;
@@ -713,33 +735,81 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 		srv->check_result.msg = e.message();
 		return;
 	}
-
-	__DP_LIB_NAMESPACE__::URLElement proxy;
-	proxy.host = args.defaultHost;
-	proxy.port = http_port;
-	proxy.type = __DP_LIB_NAMESPACE__::URLElement::Type::Http;
-	Downloader dwn(proxy);
-	dwn.SetWget(args.wgetPath);
-	dwn.SetCountTry(1);
-	dwn.SetTimeoutS(20);
-	dwn.SetIgnoreCheckCert(true);
-	try{
-		srv->check_result.ipAddr = __DP_LIB_NAMESPACE__::trim(dwn.Download(args.checkIpUrl));
-		if (!__DP_LIB_NAMESPACE__::isIPv4(srv->check_result.ipAddr)) {
-			srv->check_result.ipAddr = "[FAIL]";
-			DP_LOG_DEBUG << "Server " << srv->name << " is work ?";
+	if (args.auto_check_mode == AutoCheckingMode::Work) {
+		Node * proxy1 = new Node(new ConnectorDirect());
+		Node * proxy = new Node(new ConnectorSocks(flags.listen_host, flags.port), proxy1);
+		__DP_LIB_NAMESPACE__::URLElement url = __DP_LIB_NAMESPACE__::URLElement::parse(args.checkIpUrl);
+		if (url.port == 0) {
+			if (url.type == __DP_LIB_NAMESPACE__::URLElement::Type::Http)
+				url.port = 80;
+			if (url.type == __DP_LIB_NAMESPACE__::URLElement::Type::Https)
+				url.port = 443;
 		}
-		DP_LOG_DEBUG << "Server " << srv->name << " ip " << srv->check_result.ipAddr;
 
-	} catch (__DP_LIB_NAMESPACE__::LineException e) {
-		DP_LOG_DEBUG << "Server " << srv->name << " is not work (Fail to check ip)";
-		srv->check_result.isRun = false;
-		srv->check_result.msg = e.message();
-		StopByClient(runned);
-		return;
+
+		//TCPClient * cl = proxy->makeConnect(this->getConfig().replaceVariables(srv->host), __DP_LIB_NAMESPACE__::parse<unsigned short>(this->getConfig().replaceVariables(srv->port)));
+		TCPClient * cl = proxy->makeConnect(url.host, url.port);
+		//TCPClient * cl = proxy->makeConnect("8.8.8.8", 53);
+		delete proxy1;
+		delete proxy;
+		if (cl == nullptr) {
+			srv->check_result.isRun = false;
+			srv->check_result.ipAddr = "";
+		} else {
+			srv->check_result.isRun = true;
+			srv->check_result.ipAddr = "0";
+
+			String http = "GET / HTTP/1.1\r\nHost: " + url.host + "\r\n\r\n";
+
+			cl->setReadTimeout(10);
+			if (cl->Send(http) != http.size()) {
+				srv->check_result.isRun = false;
+				srv->check_result.ipAddr = "";
+			} else {
+				char c;
+				auto t1 = std::chrono::high_resolution_clock::now();
+				int r = cl->ReadN(&c, 1);
+				auto t2 = std::chrono::high_resolution_clock::now();
+				auto time_s = std::chrono::duration_cast<std::chrono::seconds> (t2 - t1).count();
+				if (r == 1) {
+					srv->check_result.isRun = true;
+					srv->check_result.ipAddr = "0";
+				} else {
+					srv->check_result.isRun = false;
+					srv->check_result.ipAddr = "";
+				}
+			}
+			delete cl;
+		}
 	}
-	srv->check_result.isRun = srv->check_result.ipAddr.size() > 3;
-	if (args.auto_check_mode == ShadowSocksSettings::AutoCheckingMode::Speed && srv->check_result.isRun) {
+	if (args.auto_check_mode == AutoCheckingMode::Ip || args.auto_check_mode == AutoCheckingMode::Speed) {
+		__DP_LIB_NAMESPACE__::URLElement proxy;
+		proxy.host = args.defaultHost;
+		proxy.port = http_port;
+		proxy.type = __DP_LIB_NAMESPACE__::URLElement::Type::Http;
+		Downloader dwn(proxy);
+		dwn.SetWget(args.wgetPath);
+		dwn.SetCountTry(1);
+		dwn.SetTimeoutS(20);
+		dwn.SetIgnoreCheckCert(true);
+		try{
+			srv->check_result.ipAddr = __DP_LIB_NAMESPACE__::trim(dwn.Download(args.checkIpUrl));
+			if (!__DP_LIB_NAMESPACE__::isIPv4(srv->check_result.ipAddr)) {
+				srv->check_result.ipAddr = "[FAIL]";
+				DP_LOG_DEBUG << "Server " << srv->name << " is work ?";
+			}
+			DP_LOG_DEBUG << "Server " << srv->name << " ip " << srv->check_result.ipAddr;
+
+		} catch (__DP_LIB_NAMESPACE__::LineException e) {
+			DP_LOG_DEBUG << "Server " << srv->name << " is not work (Fail to check ip)";
+			srv->check_result.isRun = false;
+			srv->check_result.msg = e.message();
+			StopByClient(runned);
+			return;
+		}
+		srv->check_result.isRun = srv->check_result.ipAddr.size() > 3;
+	}
+	if (args.auto_check_mode == AutoCheckingMode::Speed && srv->check_result.isRun) {
 		__DP_LIB_NAMESPACE__::URLElement proxy;
 		proxy.host = args.defaultHost;
 		proxy.port = http_port;

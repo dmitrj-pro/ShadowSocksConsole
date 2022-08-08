@@ -125,7 +125,7 @@ struct _RunParams {
 	String name = "DEFAULT";
 	bool multimode = false;
 	bool isNull = true;
-	enum class ShadowSocksType {None, GO, Rust};
+	enum class ShadowSocksType {None, GO, Rust, Android};
 	ShadowSocksType shadowsocks_type = ShadowSocksType::None;
 
 
@@ -151,6 +151,8 @@ inline _RunParams::ShadowSocksType parseSSType(const String & s) {
 		return  _RunParams::ShadowSocksType::GO;
 	if (s == "rust")
 		return _RunParams::ShadowSocksType::Rust;
+	if (s == "android")
+		return _RunParams::ShadowSocksType::Android;
 	if (s == "none")
 		return _RunParams::ShadowSocksType::None;
 	return _RunParams::ShadowSocksType::GO;
@@ -160,6 +162,8 @@ inline String SSTtypetoString(_RunParams::ShadowSocksType t){
 		return "go";
 	if (t == _RunParams::ShadowSocksType::Rust)
 		return "rust";
+	if (t == _RunParams::ShadowSocksType::Android)
+		return "android";
 	if (t == _RunParams::ShadowSocksType::None)
 		return "none";
 	return "none";
@@ -176,6 +180,7 @@ struct _Task{
 	const int id;
 
 	bool autostart = false;
+	bool enable_udp = false;
 	bool enable_ipv6 = false;
 
 	String runParamsName = "DEFAULT";
@@ -206,6 +211,7 @@ struct _Task{
 		res->method = replacer(method);
 		res->autostart = autostart;
 		res->enable_ipv6 = enable_ipv6;
+		res->enable_udp = enable_udp;
 		res->runParamsName = runParamsName;
 		for (int server: servers_id)
 			res->servers_id.push_back(server);
@@ -236,6 +242,7 @@ struct Tun2SocksConfig{
 class ShadowSocksClient;
 
 enum SSClientFlagsBoolStatus { None, False, True};
+enum class ServerCheckingMode { Off, TCPCheck, DeepFast, DeepCheck};
 struct SSClientFlags{
 	bool runVPN = true;
 	String vpnName = "";
@@ -245,6 +252,8 @@ struct SSClientFlags{
 	SSClientFlagsBoolStatus sysproxy_s = SSClientFlagsBoolStatus::None;
 	bool deepCheck = true;
 	String listen_host = "";
+	bool disableTuns = false;
+	ServerCheckingMode checkServerMode = ServerCheckingMode::TCPCheck;
 	SSClientFlagsBoolStatus multimode = SSClientFlagsBoolStatus::None;
 	_RunParams::ShadowSocksType type = _RunParams::ShadowSocksType::None;
 };
@@ -267,10 +276,54 @@ inline AutoStartMode str_to_AutoStartMode(const String & val) {
 	return AutoStartMode::Off;
 }
 
+enum class AutoCheckingMode { Off, Passiv, Work, Ip, Speed };
+inline String AutoCheckingMode_to_str(AutoCheckingMode m) {
+	switch (m) {
+		case AutoCheckingMode::Off: return "Off";
+		case AutoCheckingMode::Ip: return "Ip";
+		case AutoCheckingMode::Work: return "Work";
+		case AutoCheckingMode::Passiv: return "Passiv";
+		case AutoCheckingMode::Speed: return "Speed";
+		default: return "Off";
+	}
+}
+inline AutoCheckingMode str_to_AutoCheckingMode(const String & m) {
+	if (m == "Off") return AutoCheckingMode::Off;
+	if ( m == "Ip" ) return AutoCheckingMode::Ip;
+	if ( m == "Work") return AutoCheckingMode::Work;
+	if ( m == "Passiv" ) return AutoCheckingMode::Passiv;
+	if ( m == "Speed" ) return AutoCheckingMode::Speed;
+	return AutoCheckingMode::Off;
+}
+
+inline String ServerCheckingMode_to_str(ServerCheckingMode v) {
+	switch (v) {
+		case ServerCheckingMode::Off: return "off";
+		case ServerCheckingMode::TCPCheck: return "tcp";
+		case ServerCheckingMode::DeepFast: return "deepfast";
+		case ServerCheckingMode::DeepCheck: return "deep";
+		default: return "off";
+	}
+}
+inline ServerCheckingMode str_to_ServerCheckingMode(const String & val) {
+	if (val == "off") return ServerCheckingMode::Off;
+	if (val == "deepfast") return ServerCheckingMode::DeepFast;
+	if (val == "tcp") return ServerCheckingMode::TCPCheck;
+	if (val == "deep") return ServerCheckingMode::DeepCheck;
+	return ServerCheckingMode::TCPCheck;
+}
+
+
 struct ShadowSocksSettings{
 	List<_Server*> servers;
 	List<_Task * > tasks;
+	List<Tun2SocksConfig> tun2socksConf;
+	List<_RunParams> runParams;
+
 	AutoStartMode autostart = AutoStartMode::Off;
+	UInt countRestartAutostarted = 3;
+	UInt web_session_timeout_m = 60;
+
 	String shadowSocksPath = "${INSTALLED}/ss";
 	String shadowSocksPathRust = "${INSTALLED}/ss-rust";
 	_RunParams::ShadowSocksType shadowSocksType = _RunParams::ShadowSocksType::GO;
@@ -278,37 +331,19 @@ struct ShadowSocksSettings{
 	String tun2socksPath = "${INSTALLED}/tun2socks";
 	String dns2socksPath = "${INSTALLED}/dns2socks";
 	String wgetPath = "${INSTALLED}/wget";
+	String tempPath = "${INSTALLED}";
 	bool fixLinuxWgetPath = true;
-	bool enableDeepCheckServer = false;
+
+	ServerCheckingMode checkServerMode = ServerCheckingMode::TCPCheck;
 	bool autoDetectTunInterface = false;
 	static bool enablePreStartStopScripts;
-	String tempPath = "${INSTALLED}";
 	bool enableLogging = false;
 	bool hideDNS2Socks = true;
 	Map<String, String> variables;
 	UInt udpTimeout = 600;
-	UInt web_session_timeout_m = 60;
-	List<Tun2SocksConfig> tun2socksConf;
-	List<_RunParams> runParams;
-	bool IGNORECHECKSERVER = false;
+
 	String bootstrapDNS = "8.8.8.8";
-	enum class AutoCheckingMode { Off, Passiv, Ip, Speed };
-	inline static String auto_to_str(AutoCheckingMode m) {
-		switch (m) {
-			case AutoCheckingMode::Off: return "Off";
-			case AutoCheckingMode::Ip: return "Ip";
-			case AutoCheckingMode::Passiv: return "Passiv";
-			case AutoCheckingMode::Speed: return "Speed";
-			default: return "Off";
-		}
-	}
-	inline static AutoCheckingMode str_to_auto(const String & m) {
-		if (m == "Off") return AutoCheckingMode::Off;
-		if ( m == "Ip" ) return AutoCheckingMode::Ip;
-		if ( m == "Passiv" ) return AutoCheckingMode::Passiv;
-		if ( m == "Speed" ) return AutoCheckingMode::Speed;
-		return AutoCheckingMode::Off;
-	}
+
 	AutoCheckingMode auto_check_mode = AutoCheckingMode::Off;
 	unsigned int auto_check_interval_s = 10;
 	String auto_check_ip_url = "https://api4.my-ip.io/ip";
@@ -349,3 +384,7 @@ struct ShadowSocksSettings{
 	ShadowSocksClient * makeServer(int id, const SSClientFlags & flags);
 };
 
+
+String getWritebleDirectory();
+
+String getExecutableDirectory();

@@ -35,7 +35,7 @@ class ShadowSocksClient{
 		std::mutex _locker;
 		bool _is_closed = false;
 		_Server * srv = nullptr;
-		_Task * tk;
+		_Task * tk = nullptr;
 		_RunParams run_params;
 		Tun2SocksConfig t2s;
 		_RunParams::ShadowSocksType shadowsocks_type = _RunParams::ShadowSocksType::None;
@@ -46,6 +46,7 @@ class ShadowSocksClient{
 		unsigned int udpTimeout;
 
 		__DP_LIB_NAMESPACE__::Application * _socks = nullptr;
+		__DP_LIB_NAMESPACE__::Application * _socksUdp = nullptr;
 		__DP_LIB_NAMESPACE__::Thread * _http_server_thread = nullptr;
 		__DP_LIB_NAMESPACE__::TCPServer _http_server;
 		Node * http_connector_node = nullptr;
@@ -70,6 +71,22 @@ class ShadowSocksClient{
 
 		ShadowSocksClientStatus status = ShadowSocksClientStatus::None;
 
+		void PreStartChecking(SSClientFlags flags);
+		void StartMultiMode(SSClientFlags flags);
+		void GenerateCMDGO(SSClientFlags flags);
+		String GenerateConfigRust(SSClientFlags flags, TunType type);
+		String GenerateConfigRustName(TunType type);
+		String GenerateConfigRustTCP(SSClientFlags flags);
+		String GenerateConfigRustUDP(SSClientFlags flags);
+		void StartRustUdp(SSClientFlags flags);
+		// Return path to config
+		String GenerateCMDRust(SSClientFlags flags);
+		// return true if started
+		bool waitForStart();
+		// return true if started
+		bool startTun2Socks(SSClientFlags flags, OnShadowSocksRunned _onSuccess);
+		bool startHttpProxy(SSClientFlags flags, OnShadowSocksRunned _onSuccess);
+
 	public:
 		inline void SetOnCrash(OnShadowSocksError f) { _onCrash = f; }
 		void onCrash(const ExitStatus & status);
@@ -86,7 +103,9 @@ class ShadowSocksClient{
 		ShadowSocksClient(_Server * sr, _Task * t, const _RunParams & run_params, const Tun2SocksConfig & t2s) :srv(sr), tk(t), run_params(run_params), t2s(t2s) {}
 		void Start(SSClientFlags flags, OnShadowSocksRunned _onSuccess);
 		void Stop(bool is_async = true);
+		void Stop(const ExitStatus & status);
 		void _Stop();
+		void _Stop(const ExitStatus & status);
 		void SetSystemProxy();
 		inline void SetMultiModeServers(__DP_LIB_NAMESPACE__::List<_Server * > srvs) {
 			_multimode_servers.reserve(srvs.size());

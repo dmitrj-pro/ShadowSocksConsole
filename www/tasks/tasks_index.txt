@@ -126,7 +126,6 @@
 								<tr>
 									<th scope="col">#</th>
 									<th scope="col">Name</th>
-									<th scope="col">Method</th>
 									<th scope="col">Run Parametr</th>
 									<th scope="col">Servers</th>
 									<th scope="col">Status</th>

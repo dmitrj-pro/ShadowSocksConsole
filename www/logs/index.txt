@@ -1,0 +1,33 @@
+<script>
+	var log_line = 0;
+	function checkNewLogs() {
+		fetch("/logs_content.html?line=" + log_line.toString(), {
+			method: "GET"
+		}).then(function(res) {
+			res.text().then(function(text) {
+				initLogTimer();
+				let pos = text.indexOf(">");
+				if (pos == -1)
+					return;
+				log_line = parseInt(text.substring(0, pos));
+				text = text.substring(pos+1)
+				if (text.length == 0)
+					return;
+				var text_area = document.getElementById("logs");
+				text_area.value = text;
+			});
+		});
+	}
+	function initLogTimer() {
+		setTimeout(() => {
+			checkNewLogs();
+		}, 2000);
+	}
+	checkNewLogs();
+	initLogTimer();
+</script>
+
+<div class="form-group">
+	<label for="logs">Log:</label>
+	<textarea class="form-control" id="logs" name="logs" rows="100"></textarea>
+</div>

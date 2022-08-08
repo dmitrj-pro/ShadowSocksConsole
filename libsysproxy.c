@@ -1,4 +1,4 @@
-#ifdef DP_LIN
+#ifdef DP_LINUX
 	#include <wchar.h>
 #endif
 #ifdef DP_WIN
@@ -285,8 +285,10 @@ int setProxy(wchar_t * _host, unsigned short length) {
 
 #else
 int setNoProxy(){
+	return 0;
 }
 
 int setProxy(wchar_t * host) {
+	return 0;
 }
 #endif

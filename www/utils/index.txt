@@ -120,6 +120,51 @@
 				textarea.scrollTop = textarea.scrollHeight;
 			</script>
 		</td>
+		<td>
+			Manage TAP Driver (On Windows only)
+			{}
+			<table class="table table-bordered">
+				<tr>
+					<td>
+						<form method="POST" style="display: block;">
+							<div style="display:flex;">
+								<div class="form-group" style="display:none;">
+									<input type="text" class="form-control" id="mode" name="mode" value="install_tap">
+								</div>
+								<div class="card-action">
+									<button class="btn btn-success">Install</button>
+								</div>
+							</div>
+						</form>
+					</td>
+					<td>
+						<form method="POST" style="display: block;">
+							<div style="display:flex;">
+								<div class="form-group" style="display:none;">
+									<input type="text" class="form-control" id="mode" name="mode" value="remove_tap">
+								</div>
+								<div class="card-action">
+									<button class="btn btn-danger">Remove</button>
+								</div>
+							</div>
+						</form>
+					</td>
+					<td>
+						<form method="POST" style="display: block;">
+							<div style="display:flex;">
+								<div class="form-group" style="display:none;">
+									<input type="text" class="form-control" id="mode" name="mode" value="detect_tap">
+								</div>
+								<div class="card-action">
+									<button class="btn btn-border">Detect</button>
+								</div>
+							</div>
+						</form>
+					</td>
+				</tr>
+			</table>
+			
+		</td>
 	</tr>
 
 </table>

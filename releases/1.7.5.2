@@ -1,0 +1,7 @@
+- заменил параметры IGNORECHECKSERVER и enableDeepCheckServer на checkServerMode с enum;
+- добавил флаг checkServerMode в SSClientFlags, чем исправил потенциальную ошибку с IGNORECHECKSERVER;
+- добавил более глубокую проверку запуска ShadowSocks;
+- поправил баг с падением, если пароль для boot.conf не подходит (версия ShadowSocksConsole поменялась);
+- на данный момент добавил режим совместимости checkServerMode со старыми версиями конфига;
+- добавил в Utils возможность установки/удаления tap;
+- исправлен баг с logout после N минут от начала сессии (теперь после N минут бездействия).

@@ -17,7 +17,7 @@ Request WebUI::processGetEditSettings(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	List<String> stringParams = List<String> ({"shadowSocksPath", "shadowSocksPathRust", "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
-	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s", "web_session_timeout_m"});
+	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s", "web_session_timeout_m", "countRestartAutostarted"});
 
 	String params = req->get["edit"];
 	Request resp = makeRequest();
@@ -55,6 +55,7 @@ Request WebUI::processGetEditSettings(Request req) {
 		if (params == "udpTimeout") { val = toString(set.udpTimeout); var = "Udp Timeout (s)"; min = 0;}
 		if (params == "web_session_timeout_m") { val = toString(set.web_session_timeout_m); var = "Web session timeout (m)"; min = 0; }
 		if (params == "auto_check_interval_s") { val = toString(set.auto_check_interval_s); var = "Auto check server interval (s)"; min = 0; }
+		if (params == "countRestartAutostarted") { val = toString(set.countRestartAutostarted); var = "Count of restart task on start on boot"; min = 0; }
 
 		String html = makePage("Edit setting", "settings/edit_uint.txt", List<String>({ params, var, toString(min), toString(max), val }));
 		resp->body = new char[html.size() + 1];
@@ -140,19 +141,32 @@ Request WebUI::processGetEditSettings(Request req) {
 																				"Use custom wget"
 																		  }));
 		}
-		if (params == "enableDeepCheckServer") {
-			var = "Deep check servers before start task";
+
+
+		if (params == "checkServerMode") {
+			var = "Servers checking mode";
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
-																				"true",
-																				set.enableDeepCheckServer ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
-																				"Deep check servers"
+																				"off",
+																				set.checkServerMode == ServerCheckingMode::Off ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Ignore checking"
 																		  }));
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
-																				"false",
-																				(!set.enableDeepCheckServer) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
-																				"Lite check servers"
+																				"tcp",
+																				set.checkServerMode == ServerCheckingMode::TCPCheck ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Checking by tcp"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"deepfast",
+																				set.checkServerMode == ServerCheckingMode::DeepFast ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Deep fast (No IP)"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"deep",
+																				set.checkServerMode == ServerCheckingMode::DeepCheck ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Checking by get IP (Deep checking)"
 																		  }));
 		}
+
 		if (params == "autoDetectTunInterface") {
 			var = "Auto detect Tap interface";
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
@@ -166,40 +180,32 @@ Request WebUI::processGetEditSettings(Request req) {
 																				"Disable"
 																		  }));
 		}
-		if (params == "IGNORECHECKSERVER") {
-			var = "Ignore check result";
-			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
-																				"true",
-																				set.IGNORECHECKSERVER ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
-																				"Ignore"
-																		  }));
-			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
-																				"false",
-																				(!set.IGNORECHECKSERVER) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
-																				"Check"
-																		  }));
-		}
 
 		if (params == "auto_check_mode") {
 			var = "Auto check servers";
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
 																				"Off",
-																				set.auto_check_mode == ShadowSocksSettings::AutoCheckingMode::Off ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				set.auto_check_mode == AutoCheckingMode::Off ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
 																				"Off"
 																		  }));
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
 																				"Passiv",
-																				set.auto_check_mode == ShadowSocksSettings::AutoCheckingMode::Passiv ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				set.auto_check_mode == AutoCheckingMode::Passiv ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
 																				"Passiv Mode"
 																		  }));
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"Work",
+																				set.auto_check_mode == AutoCheckingMode::Work ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Check is Work"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
 																				"Ip",
-																				set.auto_check_mode == ShadowSocksSettings::AutoCheckingMode::Ip ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				set.auto_check_mode == AutoCheckingMode::Ip ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
 																				"Ip"
 																		  }));
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
 																				"Speed",
-																				set.auto_check_mode == ShadowSocksSettings::AutoCheckingMode::Speed ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				set.auto_check_mode == AutoCheckingMode::Speed ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
 																				"Speed"
 																		  }));
 		}
@@ -241,7 +247,7 @@ Request WebUI::processPostEditSettings(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	List<String> stringParams = List<String> ({"shadowSocksPath","shadowSocksPathRust" "v2rayPluginPath", "tun2socksPath", "dns2socksPath", "wgetPath", "tempPath", "bootstrapDNS", "auto_check_ip_url", "auto_check_download_url"});
-	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s", "web_session_timeout_m"});
+	List<String> uintParams = List<String>({"udpTimeout", "auto_check_interval_s", "web_session_timeout_m", "countRestartAutostarted"});
 
 	String params = req->get["edit"];
 	String value = req->post["value"].value;
@@ -266,6 +272,12 @@ Request WebUI::processPostEditSettings(Request req) {
 			return HttpServer::generate404(req->method, req->host, req->path);
 		}
 		(*val) = req->post["value"].value;
+		if (params == "bootstrapDNS") {
+			if (set.bootstrapDNS.size() > 0)
+				__DP_LIB_NAMESPACE__::global_config.setDNS(set.bootstrapDNS);
+			else
+				__DP_LIB_NAMESPACE__::global_config.resetDNS();
+		}
 	}
 	if (__DP_LIB_NAMESPACE__::ConteinsElement(uintParams, params)) {
 		__DP_LIB_NAMESPACE__::UInt * val = nullptr;
@@ -274,6 +286,7 @@ Request WebUI::processPostEditSettings(Request req) {
 		if (params == "udpTimeout") { val = &set.udpTimeout; }
 		if (params == "web_session_timeout_m") { val = &set.web_session_timeout_m; }
 		if (params == "auto_check_interval_s") { val = &set.auto_check_interval_s;}
+		if (params == "countRestartAutostarted") { val = &set.countRestartAutostarted;}
 
 		if (val == nullptr) {
 			DP_LOG_FATAL << "Unknow parametr " << params;
@@ -294,19 +307,12 @@ Request WebUI::processPostEditSettings(Request req) {
 	if (params == "enableLogging") {
 		auto & set = ShadowSocksController::Get().getConfig();
 		set.enableLogging = value == "true" ? true : false;
-		__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-		logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
+		__DP_LIB_NAMESPACE__::Path logF{getWritebleDirectory()};
 		logF.Append("LOGGING.txt");
 		if (set.enableLogging) {
-			if (!__DP_LIB_NAMESPACE__::log.FileIsOpen())
-				__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
-			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
-			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+			ShadowSocksController::Get().OpenLogFile();
 		} else {
-			__DP_LIB_NAMESPACE__::log.FileClose();
-			__DP_LIB_NAMESPACE__::RemoveFile(logF.Get());
-			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Info);
-			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPFatal);
+			ShadowSocksController::Get().CloseLogFile();
 		}
 	}
 	if (params == "autoDetectTunInterface") {
@@ -321,18 +327,14 @@ Request WebUI::processPostEditSettings(Request req) {
 		auto & set = ShadowSocksController::Get().getConfig();
 		set.fixLinuxWgetPath = value == "true" ? true : false;
 	}
-	if (params == "enableDeepCheckServer") {
+	if (params == "checkServerMode") {
 		auto & set = ShadowSocksController::Get().getConfig();
-		set.enableDeepCheckServer = value == "true" ? true : false;
-	}
-	if (params == "IGNORECHECKSERVER") {
-		auto & set = ShadowSocksController::Get().getConfig();
-		set.IGNORECHECKSERVER = value == "true" ? true : false;
+		set.checkServerMode = str_to_ServerCheckingMode(value);
 	}
 
 	if (params == "auto_check_mode") {
 		auto & set = ShadowSocksController::Get().getConfig();
-		set.auto_check_mode = ShadowSocksSettings::str_to_auto(value);
+		set.auto_check_mode = str_to_AutoCheckingMode(value);
 	}
 
 	ShadowSocksController::Get().SaveConfig();
@@ -348,6 +350,11 @@ Request WebUI::processGetSettings(Request) {
 															"Enable autostart",
 															AutoStartMode_to_str(c.autostart),
 															"autostart"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Count of try restart task on autostart",
+															toString(c.countRestartAutostarted),
+															"countRestartAutostarted"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Web session timeout (m)",
@@ -422,14 +429,9 @@ Request WebUI::processGetSettings(Request) {
 															"udpTimeout"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
-															"Deep check servers before start task",
-															toString(c.enableDeepCheckServer),
-															"enableDeepCheckServer"
-													  }));
-	out << findFillText("settings/settings_item.txt", List<String>({
-															"Ignore result check server",
-															toString(c.IGNORECHECKSERVER),
-															"IGNORECHECKSERVER"
+															"Servers checking mode",
+															ServerCheckingMode_to_str(c.checkServerMode),
+															"checkServerMode"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Bootstrap DNS",
@@ -439,7 +441,7 @@ Request WebUI::processGetSettings(Request) {
 
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"Auto check servers",
-															ShadowSocksSettings::auto_to_str(c.auto_check_mode),
+															AutoCheckingMode_to_str(c.auto_check_mode),
 															"auto_check_mode"
 													  }));
 

@@ -57,6 +57,7 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 		void logoutOldUser();
 		UserSession & getUserSession(const String & id);
 		bool existsUserSession(const String & id) const;
+		bool existsUserSessionAndUpdateIt(const String & id);
 
 		Request processGetMain(Request req);
 		Request processPostMain(Request req);
@@ -123,6 +124,11 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 
 		Request processGetExport(Request req);
 		Request processPostExport(Request req);
+		Request processGetImport(Request req);
+		Request processPostImport(Request req);
+
+		Request processGetLogsPage(Request req);
+		Request processGetLogsContent(Request req);
 		Request processGetLogout(Request req);
 		Request processGetExit(Request req);
 		Request processPostExit(Request req);
@@ -141,6 +147,8 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 			String find_free_host ="";
 			unsigned short find_free_count = 0;
 			List<unsigned short> find_free_result;
+
+			String tap_install_result = "";
 		};
 		UtilsStruct makeUtilsStruct() const;
 

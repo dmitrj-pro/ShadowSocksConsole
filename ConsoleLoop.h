@@ -11,8 +11,9 @@
 #include <_Driver/ServiceMain.h>
 #include "VERSION.h"
 #include <_Driver/Files.h>
-#include "WGetDownloader/Downloader.h"
+#include <Addon/WGetDownloader.h>
 #include <Network/Utils.h>
+#include <Addon/LiteralReader.h>
 
 namespace __DP_LIB_NAMESPACE__ {
 	bool startWithN(const String & str, const String & in);
@@ -332,10 +333,10 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 			_reader = nullptr;
 		}
 		if (cmd.size() != 0) {
-			_reader = new LiteralReader(cmd, delimers);
+			_reader = new LiteralReader(cmd, delimers, false);
 			cmd = "";
 		} else
-			_reader = new LiteralReader(arg.read("next"), delimers);
+			_reader = new LiteralReader(arg.read("next"), delimers, false);
 		while (!_reader->isEnd()) {
 			auto readed = _reader->read();
 			if (readed.size() == 0)
@@ -371,7 +372,7 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 
 					cout << "DNS = ";
 
-					LiteralReader reade(value, delimers);
+					LiteralReader reade(value, delimers, false);
 					while (!reade.isEnd()) {
 						auto val = reade.read();
 						if (val.size() != 1)
@@ -384,7 +385,7 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 				}
 				if (parametr == "ignore") {
 					conf.ignoreIP.clear();
-					LiteralReader reade(value, delimers);
+					LiteralReader reade(value, delimers, false);
 					cout << "ignore = ";
 					while (!reade.isEnd()) {
 						auto val = reade.read();
@@ -463,7 +464,7 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 				if (parametr == "servers") {
 					cf->servers_id.clear();
 
-					LiteralReader reade(value, delimers);
+					LiteralReader reade(value, delimers, false);
 					cout << "servers = ";
 
 					while (!reade.isEnd()) {
@@ -556,6 +557,7 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 					conf.autostart = str_to_AutoStartMode(value);
 					cout << "autostart" << " = " << AutoStartMode_to_str(conf.autostart) <<"\n";
 				}
+				MiCro_t("countRestartAutostarted", countRestartAutostarted, unsigned int);
 				MiCro_s("ss_path", shadowSocksPath);
 				MiCro_s("v2ray_path", v2rayPluginPath);
 				MiCro_s("tun2socks_path", tun2socksPath);
@@ -567,12 +569,15 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 				MiCro_t("enable_logging", enableLogging, bool);
 				MiCro_t("hide_dns2socks", hideDNS2Socks, bool);
 				MiCro_t("udp_timeout", udpTimeout, UInt);
-				MiCro_t("ignore_check", IGNORECHECKSERVER, bool);
+				if (parametr == "checkServerMode") {
+					conf.checkServerMode = str_to_ServerCheckingMode(value);
+					cout << "autostart" << " = " << ServerCheckingMode_to_str(conf.checkServerMode) <<"\n";
+				}
 				MiCro_s("bootstrap_dns", bootstrapDNS);
 
 				if (parametr == "auto_check_servers") {
-					conf.auto_check_mode = ShadowSocksSettings::str_to_auto(value);
-					cout << "auto_check_mode" << " = " << ShadowSocksSettings::auto_to_str(conf.auto_check_mode) <<"\n";
+					conf.auto_check_mode = str_to_AutoCheckingMode(value);
+					cout << "auto_check_mode" << " = " << AutoCheckingMode_to_str(conf.auto_check_mode) <<"\n";
 				}
 				MiCro_t("auto_check_interval_s", auto_check_interval_s, unsigned int);
 				MiCro_s("auto_check_server_ip_url", auto_check_ip_url);
@@ -781,6 +786,9 @@ void ConsoleLooper<OutStream, InStream>::EditTask(ParamsReader & arg) {
 	tx = arg.read("Enable IPv6 (for mobile)? (0/1)", toString(tk->enable_ipv6));
 	if (tx.size() > 0) tk->enable_ipv6 = parse<bool>(tx);
 
+	tx = arg.read("Enable UDP Support", toString(tk->enable_udp));
+	if (tx.size() > 0) tk->enable_udp = parse<bool>(tx);
+
 	ctrl.getConfig().deleteTaskById(tk->id);
 	if (!ctrl.getConfig().CheckTask(tk)) {
 		ctrl.getConfig().tasks.push_back(_sr);
@@ -803,8 +811,7 @@ void ConsoleLooper<OutStream, InStream>::GetSource(ParamsReader & arg) {
 			return;
 		}
 		if (cmd == "boot") {
-			Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-			p = Path(p.GetFolder());
+			Path p {getWritebleDirectory()};
 			p.Append("boot.conf");
 			if (!p.IsFile())
 				return;
@@ -824,6 +831,7 @@ void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	SHOWSETTINGS("Name", "Value");
 	cout << "----------------------------\n";
 	SHOWSETTINGS("Enable autostart", AutoStartMode_to_str(conf.autostart));
+	SHOWSETTINGS("Count of try restart task on autostart", conf.countRestartAutostarted);
 	SHOWSETTINGS("ShadowSocks Path", conf.shadowSocksPath);
 	SHOWSETTINGS("ShadowSocksRust Path", conf.shadowSocksPathRust);
 	SHOWSETTINGS("V2Ray Path", conf.v2rayPluginPath);
@@ -834,13 +842,12 @@ void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	SHOWSETTINGS("Enable logging file", conf.enableLogging);
 	SHOWSETTINGS("Hide DNS2Socks", conf.hideDNS2Socks);
 	SHOWSETTINGS("Use system wget (Linux)", conf.fixLinuxWgetPath);
-	SHOWSETTINGS("Deep check servers before start task", conf.enableDeepCheckServer);
 	SHOWSETTINGS("Auto detect Tap interface", conf.autoDetectTunInterface);
 	SHOWSETTINGS("Udp Timeout (s)", conf.udpTimeout);
 	SHOWSETTINGS("Web session timeout (m)", conf.web_session_timeout_m);
-	SHOWSETTINGS("Ignore check result", conf.IGNORECHECKSERVER);
+	SHOWSETTINGS("Servers checking mode", ServerCheckingMode_to_str(conf.checkServerMode));
 	SHOWSETTINGS("Bootstrap DNS", conf.bootstrapDNS);
-	SHOWSETTINGS("Auto check servers", ShadowSocksSettings::auto_to_str(conf.auto_check_mode));
+	SHOWSETTINGS("Auto check servers", AutoCheckingMode_to_str(conf.auto_check_mode));
 	SHOWSETTINGS("Auto check server interval (s)", conf.auto_check_interval_s);
 	SHOWSETTINGS("Auto check server ip url", conf.auto_check_ip_url);
 	SHOWSETTINGS("Auto check server download url", conf.auto_check_download_url);
@@ -867,6 +874,9 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	cmd = arg.read("AutoStart", AutoStartMode_to_str(conf.autostart));
 	if (cmd.size() > 0) conf.autostart = str_to_AutoStartMode(cmd);
 
+	cmd = arg.read("countRestartAutostarted", toString(conf.countRestartAutostarted));
+	if (cmd.size() > 0) conf.countRestartAutostarted = parse<UInt>(cmd);
+
 	cmd = arg.read("Tun2Socks", toString(conf.tun2socksPath));
 	if (cmd.size() > 0) conf.tun2socksPath = cmd;
 	cmd = arg.read("Dns2Socks", toString(conf.dns2socksPath));
@@ -880,6 +890,8 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 
 	cmd = arg.read("Bootstrap DNS", conf.bootstrapDNS);
 	if (cmd.size() > 1) conf.bootstrapDNS = cmd;
+	if (conf.bootstrapDNS.size() > 4)
+		__DP_LIB_NAMESPACE__::global_config.setDNS(conf.bootstrapDNS);
 
 	cmd = arg.read("Web session timeout (m)", toString(conf.web_session_timeout_m));
 	if (cmd.size() > 0) conf.web_session_timeout_m = parse<UInt>(cmd);
@@ -887,14 +899,11 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	cmd = arg.read("Udp Timeout (s)", toString(conf.udpTimeout));
 	if (cmd.size() > 0) conf.udpTimeout = parse<UInt>(cmd);
 
-	cmd = arg.read("Ignore check result", toString(conf.IGNORECHECKSERVER));
-	if (cmd.size() > 0) conf.IGNORECHECKSERVER = parse<bool>(cmd);
+	cmd = arg.read("Servers checking mode (off, tcp, deep)", ServerCheckingMode_to_str(conf.checkServerMode));
+	if (cmd.size() > 0) conf.checkServerMode = str_to_ServerCheckingMode(cmd);
 
 	cmd = arg.read("Use system wget (Linux)", toString(conf.fixLinuxWgetPath));
 	if (cmd.size() > 0) conf.fixLinuxWgetPath = parse<bool>(cmd);
-
-	cmd = arg.read("Deep check servers before start task", toString(conf.enableDeepCheckServer));
-	if (cmd.size() > 0) conf.enableDeepCheckServer = parse<bool>(cmd);
 
 	cmd = arg.read("Auto detect Tap interface", toString(conf.autoDetectTunInterface));
 	if (cmd.size() > 0) conf.autoDetectTunInterface = parse<bool>(cmd);
@@ -902,8 +911,8 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	cmd = arg.read("Hide DNS2Socks", toString(conf.hideDNS2Socks));
 	if (cmd.size() > 0) conf.hideDNS2Socks = parse<bool>(cmd);
 
-	cmd = arg.read("Auto check servers (Off, Ip, Speed)", ShadowSocksSettings::auto_to_str(conf.auto_check_mode));
-	if (cmd.size() > 0) conf.auto_check_mode = ShadowSocksSettings::str_to_auto(cmd);
+	cmd = arg.read("Auto check servers (Off, Ip, Speed)", AutoCheckingMode_to_str(conf.auto_check_mode));
+	if (cmd.size() > 0) conf.auto_check_mode = str_to_AutoCheckingMode(cmd);
 
 	cmd = arg.read("Auto check server interval (s)", toString(conf.auto_check_interval_s));
 	if (cmd.size() > 0) conf.auto_check_interval_s = parse<unsigned int>(cmd);
@@ -918,12 +927,7 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 	if (cmd.size() > 0) {
 		conf.enableLogging = parse<bool>(cmd);
 		if (conf.enableLogging) {
-			__DP_LIB_NAMESPACE__::Path logF(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
-			logF=__DP_LIB_NAMESPACE__::Path(logF.GetFolder());
-			logF.Append("LOGGING.txt");
-			__DP_LIB_NAMESPACE__::log.OpenFile(logF.Get());
-			__DP_LIB_NAMESPACE__::log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
-			__DP_LIB_NAMESPACE__::log.SetLibLogLevel(__DP_LIB_NAMESPACE__::LogLevel::DPDebug);
+			ctrl.OpenLogFile();
 		}
 	}
 
@@ -968,10 +972,6 @@ void ConsoleLooper<OutStream, InStream>::Connect(ParamsReader & arg) {
 		return;
 	}
 
-	if (ctrl.getConfig().bootstrapDNS.size() > 4) {
-		__DP_LIB_NAMESPACE__::setGlobalDNS(ctrl.getConfig().bootstrapDNS);
-	}
-
 	if (__DP_LIB_NAMESPACE__::TCPClient::IsCanConnect(cmd, parse<unsigned int>(arg.read("port"))))
 		cout << "Connect success\n";
 	else
@@ -986,8 +986,6 @@ void ConsoleLooper<OutStream, InStream>::Resolve(ParamsReader &arg) {
 		cout << "resolve ${host}";
 		return;
 	}
-	if (this->ctrl.getConfig().bootstrapDNS.size() > 4)
-		__DP_LIB_NAMESPACE__::setGlobalDNS(this->ctrl.getConfig().bootstrapDNS);
 	auto list = __DP_LIB_NAMESPACE__::resolveDomainList(cmd);
 	for (const String & ip : list)
 		cout << ip << "\n";
@@ -1224,7 +1222,7 @@ void ConsoleLooper<OutStream, InStream>::CheckSpeedTest(ParamsReader & arg, bool
 	args._server_name = "";
 	args._task_name = "";
 	args.auto_check_interval_s = 0;
-	args.auto_check_mode = enable_speed ? ShadowSocksSettings::AutoCheckingMode::Speed : ShadowSocksSettings::AutoCheckingMode::Ip;
+	args.auto_check_mode = enable_speed ? AutoCheckingMode::Speed : AutoCheckingMode::Ip;
 
 
 	while (!arg.isEmpty()) {
@@ -1300,16 +1298,12 @@ void ConsoleLooper<OutStream, InStream>::StartTask(ParamsReader & arg){
 		cout << "Unknow task\n";
 		return;
 	}
-	bool nocheck = false;
-	bool prev = ctrl.getConfig().IGNORECHECKSERVER;
 	SSClientFlags flags;
+	flags.checkServerMode = ctrl.getConfig().checkServerMode;
 	while (!arg.isEmpty()) {
 		String flag = arg.read("");
-		if (flag == "NOCHECK") {
-			nocheck = true;
-			auto & cnf = ctrl.getConfig();
-			cnf.IGNORECHECKSERVER = true;
-		}
+		if (flag == "NOCHECK")
+			flags.checkServerMode = ServerCheckingMode::Off;
 		if (flag == "NOVPN") {
 			flags.runVPN = false;
 		}
@@ -1343,10 +1337,6 @@ void ConsoleLooper<OutStream, InStream>::StartTask(ParamsReader & arg){
 	ctrl.StartByName(cmd, [this] ( const String & name) {
 		cout << "Task " << name << " succesfully started\n";
 	}, funcCrash, flags);
-	if (nocheck) {
-		auto & cnf = ctrl.getConfig();
-		cnf.IGNORECHECKSERVER = prev;
-	}
 }
 
 template <typename OutStream, typename InStream>
@@ -1430,12 +1420,12 @@ void ConsoleLooper<OutStream, InStream>::ManualCMD(const String & _cmd) {
 
 		}
 	}
-	DP_LOG_DEBUG << "Command '" << c << "'\n";
+	DP_LOG_DEBUG << "Command '" << c <<"'";
 	if (__DP_LIB_NAMESPACE__::ConteinsKey(funcs, c)) {
 		auto func = funcs[c];
 		(this->*func)(args);
 	} else {
-		DP_LOG_WARNING << "Unknow comand '" << c << "'\n";
+		DP_LOG_WARNING << "Unknow comand '" << c << "'";
 		throw EXCEPTION("Unknow comand '" + c + "'");
 	}
 }
@@ -1830,7 +1820,7 @@ void ConsoleLooper<OutStream, InStream>::ExportConfig(ParamsReader & arg) {
 		return;
 	}
 	if (!tmp.IsAbsolute()) {
-		Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+		Path p = Path(getWritebleDirectory());
 		p.Append(tmp.Get());
 		tmp = p;
 	}

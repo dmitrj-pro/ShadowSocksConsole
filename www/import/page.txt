@@ -1,0 +1,10 @@
+<form method="POST" enctype="multipart/form-data">
+	<div class="form-check">
+	<div class="form-group">
+		<label for="file">Select file config:</label>
+		<input type="file" class="form-control" id="file" name="file" placeholder="Select config (SSC version)">
+	</div>
+	<div class="card-action">
+		<button class="btn btn-danger">Import</button>
+	</div>
+</form>

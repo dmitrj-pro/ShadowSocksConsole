@@ -3,5 +3,9 @@ ${INSTALLED}/v2ray
 ${INSTALLED}/tun2socks
 ${INSTALLED}/dns2socks
 ${INSTALLED}/sysproxy
-${INSTALLED}/polipo
+
+${INSTALLED}/OemVista.inf
+${INSTALLED}/tap0901.cat
+${INSTALLED}/tap0901.sys
+${INSTALLED}/tapinstall.exe
 ${INSTALLED}

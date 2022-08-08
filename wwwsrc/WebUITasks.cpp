@@ -26,8 +26,6 @@ Request WebUI::processPostTaskStartPage(Request req) {
 	if (t == nullptr)
 		return HttpServer::generate404(req->method, req->host, req->path);
 
-	bool nocheck = false;
-	bool prev = ctrl.getConfig().IGNORECHECKSERVER;
 	DP_LOG_DEBUG << "WebUI (" << user_id << "): Custom start task " << t->name;
 
 	try{
@@ -38,15 +36,13 @@ Request WebUI::processPostTaskStartPage(Request req) {
 		};
 
 		SSClientFlags flags;
+		flags.checkServerMode = ctrl.getConfig().checkServerMode;
 
 
 		String tmp = "";
 		readParametr_n(tmp, "CHECK");
-		if (tmp == "no") {
-			nocheck = true;
-			auto & cnf = ctrl.getConfig();
-			cnf.IGNORECHECKSERVER = true;
-		}
+		if (tmp == "no")
+			flags.checkServerMode = ServerCheckingMode::Off;
 		readParametr_n(tmp, "NOVPN");
 		flags.runVPN = tmp == "no";
 
@@ -61,8 +57,21 @@ Request WebUI::processPostTaskStartPage(Request req) {
 		readParametr_n(tmp, "multimode");
 		flags.multimode = tmp == "yes" ? SSClientFlagsBoolStatus::True : (tmp == "no" ? SSClientFlagsBoolStatus::False : SSClientFlagsBoolStatus::None);
 
-		readParametr_nt(flags.port, "local_port", unsigned short);
-		readParametr_nt(flags.http_port, "local_http_port", unsigned short);
+		int _port = 0;
+		readParametr_nt(_port, "local_port", int);
+		if (_port < 0 || _port > 65536)
+			flags.port = 0;
+		else
+			flags.port = _port;
+
+		_port = 0;
+		readParametr_nt(_port, "local_http_port", int);
+		if (_port < 0 || _port > 65536)
+			flags.http_port = 0;
+		else
+			flags.http_port = _port;
+
+
 		readParametr_n(flags.vpnName, "vpn");
 		tmp = "";
 		readParametr_n(tmp, "server");
@@ -78,10 +87,6 @@ Request WebUI::processPostTaskStartPage(Request req) {
 			notifyUser(user_id, "Fail to start task " + t->name + ": " + e.toString());
 		}
 
-		if (nocheck) {
-			auto & cnf = ctrl.getConfig();
-			cnf.IGNORECHECKSERVER = prev;
-		}
 		return makeRedirect(req, "/tasks.html");
 	} catch (__DP_LIB_NAMESPACE__::LineException e) {
 		notifyUser(user_id, "Fail to start task " + t->name + ": " + e.toString());
@@ -91,10 +96,6 @@ Request WebUI::processPostTaskStartPage(Request req) {
 	Request resp = makeRequest();
 	resp->headers["Cache-Control"] = "no-cache";
 	resp->status = 500;
-	if (nocheck) {
-		auto & cnf = ctrl.getConfig();
-		cnf.IGNORECHECKSERVER = prev;
-	}
 	return resp;
 }
 
@@ -265,6 +266,7 @@ Request WebUI::processPostTaskEdit(Request req) {
 	readParametr(tk->method, "method", tk);
 	readParametr(tk->password, "password", tk);
 	readParametr_boolv(tk->enable_ipv6, "ipv6", false);
+	readParametr_boolv(tk->enable_udp, "enable_udp", false);
 	readParametr_boolv(tk->autostart, "autostart", false);
 	readParametr_n(tk->runParamsName, "runParams");
 	if (req->post.find("servers") != req->post.end() && req->post["servers"].value_size > 0) {
@@ -366,6 +368,12 @@ Request WebUI::processGetTaskEditPage(Request req) {
 															!_t->enable_ipv6 ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
+															_t->enable_udp ?
+																findText("tasks/tasks_edit_checket_true.txt") :
+																findText("tasks/tasks_edit_checket_false.txt"),
+															!_t->enable_udp ?
+																findText("tasks/tasks_edit_checket_true.txt") :
+																findText("tasks/tasks_edit_checket_false.txt"),
 															_t->autostart ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
@@ -393,6 +401,7 @@ Request WebUI::processPostNewTaskPage(Request req) {
 	readParametr(tk->method, "method", tk);
 	readParametr(tk->password, "password", tk);
 	readParametr_boolv(tk->enable_ipv6, "ipv6", false);
+	readParametr_boolv(tk->enable_udp, "enable_udp", false);
 	readParametr_boolv(tk->autostart, "autostart", false);
 	readParametr_n(tk->runParamsName, "runParams");
 	if (req->post.find("servers") != req->post.end() && req->post["servers"].value_size > 0) {
@@ -429,7 +438,7 @@ Request WebUI::processPostCheckServers(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	_ShadowSocksController::CheckLoopStruct args = ShadowSocksController::Get().makeCheckStruct();
-	args.auto_check_mode = ShadowSocksSettings::str_to_auto(req->post["mode"].value);
+	args.auto_check_mode = str_to_AutoCheckingMode(req->post["mode"].value);
 	args._task_name = "";
 	args._server_name = "";
 	args.auto_check_interval_s = 0;
@@ -465,7 +474,7 @@ Request WebUI::processPostCheckTask(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	_ShadowSocksController::CheckLoopStruct args = ShadowSocksController::Get().makeCheckStruct();
-	args.auto_check_mode = ShadowSocksSettings::str_to_auto(req->post["mode"].value);
+	args.auto_check_mode = str_to_AutoCheckingMode(req->post["mode"].value);
 	args._task_name = "";
 	args._server_name = "";
 	args.auto_check_interval_s = 0;
@@ -610,10 +619,10 @@ Request WebUI::processGetTaskStartPage(Request req) {
 
 	String html = makePage("Start task " + _t->name, "tasks/task_start_params.txt", List<String>({
 															toString(_t->id),
-															!ShadowSocksController::Get().getConfig().IGNORECHECKSERVER ?
+															ShadowSocksController::Get().getConfig().checkServerMode != ServerCheckingMode::Off ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
-															ShadowSocksController::Get().getConfig().IGNORECHECKSERVER ?
+															ShadowSocksController::Get().getConfig().checkServerMode == ServerCheckingMode::Off ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
 															run_params.tun2SocksName.size() == 0?
@@ -733,7 +742,7 @@ Request WebUI::processGetTasks(Request req) {
 				}
 				sr << findFillText("tasks/tasks_index_server_work.txt", List<String>{srv->name});
 			} else {
-				if (ShadowSocksController::Get().getConfig().auto_check_mode == ShadowSocksSettings::AutoCheckingMode::Off)
+				if (ShadowSocksController::Get().getConfig().auto_check_mode == AutoCheckingMode::Off)
 					sr << findFillText("tasks/tasks_index_server_work.txt", List<String>{srv->name});
 				else
 					sr << findFillText("tasks/tasks_index_server_down.txt", List<String>{srv->name});
@@ -811,7 +820,6 @@ Request WebUI::processGetTasks(Request req) {
 															  t->autostart ?  findText("tasks/task_item_enabled.txt") :  findText("tasks/task_item_disabled.txt"),
 															  toString(t->id),
 															  taskName,
-															  t->method,
 															  runParamInfo,
 															  sr.str(),
 															  status,

@@ -42,9 +42,21 @@
 							</a>
 						</li>
 						<li class="nav-item">
+							<a href="/import.html">
+								<i class="la la la la-arrow-left"></i>
+								<p>Import</p>
+							</a>
+						</li>
+						<li class="nav-item">
 							<a href="/utils.html">
 								<i class="la la la-sellsy"></i>
 								<p>Utils</p>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a href="/logs.html">
+								<i class="la la la-history"></i>
+								<p>Logs</p>
 							</a>
 						</li>
 						<br><br>

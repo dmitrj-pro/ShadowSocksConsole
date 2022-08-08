@@ -8,6 +8,8 @@
 #include <Network/TCPClient.h>
 #include <Network/Utils.h>
 #include "../ConsoleLoop.h"
+#include <_Driver/Application.h>
+#include "../Tun2Socks.h"
 
 using __DP_LIB_NAMESPACE__::OStrStream;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -18,14 +20,18 @@ using __DP_LIB_NAMESPACE__::trim;
 
 void WebUI::stop() {
 	if (!srv.isNull()) {
+        DP_LOG_INFO << "WebServer will be stop";
 		SmartPtr<HttpHostPathRouterServer> s = srv;
 		srv = SmartPtr<HttpHostPathRouterServer>(nullptr);
 		s->exit();
+
+        DP_LOG_INFO << "Weit WebServer finished";
 
 		if (!thread.isNull()) {
 			SmartPtr<Thread> th = thread;
 			thread = SmartPtr<Thread>(nullptr);
 			th->join();
+            DP_LOG_INFO << "WebServer stoped";
 		}
 	}
 	ShadowSocksController::Get().disconnectNotify(this);
@@ -60,12 +66,25 @@ bool WebUI::existsUserSession(const String & id) const {
 	return false;
 }
 
+bool WebUI::existsUserSessionAndUpdateIt(const String & id){
+	for (UserSession & s : this->cookies)
+		if (s.cookie == id) {
+			s.started = time(nullptr);
+			return true;
+		}
+	return false;
+}
+
 void WebUI::notifyUser(const String & user_id, const String & msg) {
 	DP_LOG_DEBUG << "Message for " << user_id << ": " << msg;
 	getUserSession(user_id).notify.push_back(msg);
 }
 
-#define CHECK_AUTH 	logoutOldUser(); if (!__DP_LIB_NAMESPACE__::ConteinsKey(r->cookie, "auth") || !existsUserSession(r->cookie["auth"])) { \
+#define CHECK_AUTH 	logoutOldUser(); if (!__DP_LIB_NAMESPACE__::ConteinsKey(r->cookie, "auth") || !existsUserSessionAndUpdateIt(r->cookie["auth"])) { \
+		return makeRedirect(r, "/login.html"); \
+	}
+
+#define CHECK_AUTH_NO_UPDATE 	logoutOldUser(); if (!__DP_LIB_NAMESPACE__::ConteinsKey(r->cookie, "auth") || !existsUserSession(r->cookie["auth"])) { \
 		return makeRedirect(r, "/login.html"); \
 	}
 
@@ -138,6 +157,12 @@ void WebUI::_start() {
 
 	srv->add_route("*", "/export.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetExport(r); });
 	srv->add_route("*", "/export.html", "POST", [this](Request r) { CHECK_AUTH; return this->processPostExport(r); });
+	srv->add_route("*", "/import.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetImport(r); });
+	srv->add_route("*", "/import.html", "POST", [this](Request r) { CHECK_AUTH; return this->processPostImport(r); });
+
+	srv->add_route("*", "/logs.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetLogsPage(r); });
+	srv->add_route("*", "/logs_content.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetLogsContent(r); });
+
 	srv->add_route("*", "/logout.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetLogout(r); });
 	srv->add_route("*", "/exit.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetExit(r); });
 	srv->add_route("*", "/exit.html", "POST", [this](Request r) { CHECK_AUTH; return this->processPostExit(r); });
@@ -148,11 +173,14 @@ void WebUI::_start() {
 	);
 	srv->add_route("*", "/utils.html", "POST", [this](Request r) { CHECK_AUTH; return this->processPostUtils(r); });
 
-	srv->add_route("*", "/notify", "GET", [this](Request r) { CHECK_AUTH; return this->processGetNews(r); });
-	srv->add_route("*", "/notify_exists", "GET", [this](Request r) { CHECK_AUTH; return this->processCheckNews(r); });
+	srv->add_route("*", "/notify", "GET", [this](Request r) { CHECK_AUTH_NO_UPDATE; return this->processGetNews(r); });
+	srv->add_route("*", "/notify_exists", "GET", [this](Request r) { CHECK_AUTH_NO_UPDATE; return this->processCheckNews(r); });
 
 	srv->add_route("*", "*", "GET", [this](Request r) { return this->processGetStaticFile(r); });
 	DP_LOG_INFO << "Started web server " << web_host << ":" << web_port;
+
+	__DP_LIB_NAMESPACE__::global_config.log.AddChannel("WebUI", new __DP_LIB_NAMESPACE__::LogBufferWriterImpl(100));
+
 	srv->listen(web_host, web_port);
 }
 
@@ -271,20 +299,6 @@ Request WebUI::processPostLogin(Request req) {
 }
 
 void WebUI::UpdateServerStatus(const String & server, const String & msg) {
-	cookies_lock.lock();
-	bool is_deleted = true;
-	while (is_deleted) {
-		is_deleted = false;
-		for (auto it = cookies.begin(); it != cookies.end(); it++) {
-			if ((*it).notify.size() > 20) {
-				DP_LOG_INFO << "User " << it->cookie << " is not active. Delete it";
-				cookies.erase(it);
-				is_deleted = true;
-				break;
-			}
-		}
-	}
-	cookies_lock.unlock();
 	for (auto it = cookies.begin(); it != cookies.end(); it++)
 		notifyUser(it->cookie, server + " " + msg);
 }
@@ -368,6 +382,54 @@ Request WebUI::processPostExport(Request req) {
 	if (resp->body_length == 0) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 	}
+	return resp;
+}
+
+Request WebUI::processGetImport(Request) {
+	String html = makePage("Export", "import/page.txt", List<String>());
+	Request resp = makeRequest();
+	resp->body = new char[html.size() + 1];
+	strncpy(resp->body, html.c_str(), html.size());
+	resp->body_length = html.size();
+	return resp;
+}
+
+Request WebUI::processPostImport(Request req) {
+
+	if (!ConteinsKey(req->post, "file"))
+		return HttpServer::generate404(req->method, req->host, req->path);
+
+	String content = trim(req->post["file"].value);
+	if (!__DP_LIB_NAMESPACE__::startWithN(content, "SCH")) {
+		return HttpServer::generate404(req->method, req->host, req->path);
+	}
+	__DP_LIB_NAMESPACE__::Ofstream oo;
+	oo.open(ShadowSocksController::Get().GetConfigPath());
+	oo << content;
+	oo.close();
+	ShadowSocksController::Get().getConfig() = ShadowSocksSettings{};
+
+	cookies_lock.lock();
+	bool is_deleted = true;
+	while (is_deleted) {
+		is_deleted = false;
+		for (auto it = cookies.begin(); it != cookies.end(); it++) {
+			if (it->consoleLooper != nullptr) {
+				ConsoleSession * ss = (ConsoleSession *) it->consoleLooper;
+				delete ss->looper;
+				ss->looper = nullptr;
+				delete ss;
+				it->consoleLooper = nullptr;
+			}
+			DP_LOG_INFO << "Force logout user " << it->cookie;
+			cookies.erase(it);
+			is_deleted = true;
+			break;
+		}
+	}
+	cookies_lock.unlock();
+
+	Request resp = makeRedirect(req, "/");
 	return resp;
 }
 
@@ -460,6 +522,7 @@ Request WebUI::processGetUtils(Request req, const UtilsStruct & res) {
 			cmd_out = ((ConsoleSession *) s.consoleLooper)->out.str();
 
 	}
+	String tap_res = res.tap_install_result.size() == 0 ? "" : "<p style=\"color: red\">" + res.tap_install_result + "</p>";
 
 	String html = makePage("Utils", "utils/index.txt", List<String>(
 														{
@@ -474,7 +537,8 @@ Request WebUI::processGetUtils(Request req, const UtilsStruct & res) {
 															 res.find_free_host,
 															 toString(res.find_free_count),
 															 out2.str(),
-															 cmd_out
+															 cmd_out,
+															 tap_res
 														 }));
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -490,6 +554,7 @@ WebUI::UtilsStruct WebUI::makeUtilsStruct() const {
 	res.find_free_host = p.localHost;
 	res.find_free_count = 5;
 	res.check_port_port = p.localPort;
+	res.tap_install_result = "";
 	return res;
 }
 
@@ -498,10 +563,6 @@ Request WebUI::processPostUtils(Request req) {
 		return HttpServer::generate404(req->method, req->host, req->path);
 
 	String mode = req->post["mode"].value;
-
-	if (ShadowSocksController::Get().getConfig().bootstrapDNS.size() > 4)
-		__DP_LIB_NAMESPACE__::setGlobalDNS(ShadowSocksController::Get().getConfig().bootstrapDNS);
-
 
 	if (mode == "check_port") {
 		if (!ConteinsKey(req->post, "host") || !ConteinsKey(req->post, "port"))
@@ -527,7 +588,7 @@ Request WebUI::processPostUtils(Request req) {
 		auto & out = ((ConsoleSession *) s.consoleLooper)->out;
 		try {
 			out << "> " << req->post["command"].value << "\n";
-			DP_LOG_DEBUG << "Input command: '" << req->post["command"].value << "'\n";
+			DP_LOG_DEBUG << "Input command: '" << req->post["command"].value << "'";
 			looper->ManualCMD(req->post["command"].value);
 		} catch (__DP_LIB_NAMESPACE__::LineException e) {
 			out << e.message() << "\nUse help\n";
@@ -563,5 +624,106 @@ Request WebUI::processPostUtils(Request req) {
 			res.find_free_result.push_back(ShadowSocksClient::findAllowPort(res.find_free_host));
 		return processGetUtils(req, res);
 	}
+	if (mode == "install_tap") {
+		#ifdef DP_WIN
+			__DP_LIB_NAMESPACE__::Path tapinstall = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/tapinstall.exe");
+			__DP_LIB_NAMESPACE__::Path OemVista = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/OemVista.inf", true);
+			__DP_LIB_NAMESPACE__::Path tap0901Sys = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/tap0901.sys", true);
+			__DP_LIB_NAMESPACE__::Path tap0901Cat = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/tap0901.cat", true);
+			if (!tapinstall.IsFile() || !OemVista.IsFile() || !tap0901Cat.IsFile() || !tap0901Sys.IsFile()) {
+				UtilsStruct res = makeUtilsStruct();
+				res.tap_install_result = "Not all file of tap driver installed. Reinstall ShadowSocksConsole";
+				return processGetUtils(req, res);
+			}
+			DP_LOG_INFO << "Try install tap driver";
+			__DP_LIB_NAMESPACE__::Application tap {tapinstall.Get()};
+			tap << "install" << OemVista.Get() << "tap0901";
+			String tap_res = tap.ExecAll();
+			if (tap.ResultCode() != 0) {
+				UtilsStruct res = makeUtilsStruct();
+				res.tap_install_result = "Fail to install tap driver (Exit code: " + toString(tap.ResultCode()) + "): " + tap_res;
+				DP_LOG_FATAL << res.tap_install_result;
+				return processGetUtils(req, res);
+			}
+			DP_LOG_INFO << "Tap driver installed";
+			UtilsStruct res = makeUtilsStruct();
+			res.tap_install_result = "Driver installer. Rename it without space and english char";
+			return processGetUtils(req, res);
+		#else
+			UtilsStruct res = makeUtilsStruct();
+			res.tap_install_result = "On Linux no need install tap driver";
+			return processGetUtils(req, res);
+		#endif
+	}
+	if (mode == "remove_tap") {
+		#ifdef DP_WIN
+			__DP_LIB_NAMESPACE__::Path tapinstall = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/tapinstall.exe");
+			__DP_LIB_NAMESPACE__::Path tap0901Sys = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/tap0901.sys", true);
+			__DP_LIB_NAMESPACE__::Path tap0901Cat = ShadowSocksController::Get().getConfig().replacePath("${INSTALLED}/tap0901.cat", true);
+			if (!tapinstall.IsFile() || !tap0901Cat.IsFile() || !tap0901Sys.IsFile()) {
+				UtilsStruct res = makeUtilsStruct();
+				res.tap_install_result = "Not all file of tap driver installed. Reinstall ShadowSocksConsole";
+				return processGetUtils(req, res);
+			}
+			DP_LOG_INFO << "Try remove tap driver";
+			__DP_LIB_NAMESPACE__::Application tap {tapinstall.Get()};
+			tap << "remove" << "tap0901";
+			String tap_res = tap.ExecAll();
+			if (tap.ResultCode() != 0) {
+				UtilsStruct res = makeUtilsStruct();
+				res.tap_install_result = "Fail to remove tap driver (Exit code: " + toString(tap.ResultCode()) + "): " + tap_res;
+				DP_LOG_FATAL << res.tap_install_result;
+				return processGetUtils(req, res);
+			}
+			DP_LOG_INFO << "Tap driver removed";
+			UtilsStruct res = makeUtilsStruct();
+			res.tap_install_result = "Driver removed";
+			return processGetUtils(req, res);
+		#else
+			UtilsStruct res = makeUtilsStruct();
+			res.tap_install_result = "On Linux no need remove tap driver";
+			return processGetUtils(req, res);
+		#endif
+	}
+	if (mode == "detect_tap") {
+		UtilsStruct res = makeUtilsStruct();
+		String tun = Tun2Socks::DetectInterfaceName();
+		tun = tun.size() == 0 ? "No detected tap." : "Tap interface '" + tun + "'.";
+		tun += "<br>Default route " + Tun2Socks::DetectDefaultRoute();
+		res.tap_install_result = tun;
+		return processGetUtils(req, res);
+	}
 	return HttpServer::generate404(req->method, req->host, req->path);
+}
+
+Request WebUI::processGetLogsPage(Request req) {
+	String html = makePage("Logs", "logs/index.txt", List<String>());
+	Request resp = makeRequest();
+	resp->body = new char[html.size() + 1];
+	strncpy(resp->body, html.c_str(), html.size());
+	resp->body_length = html.size();
+	return resp;
+}
+
+Request WebUI::processGetLogsContent(Request req) {
+	UInt line = 0;
+	if (ConteinsKey(req->get, "line")) {
+		line = parse<UInt>(req->get["line"]);
+	}
+	//WebUI
+	__DP_LIB_NAMESPACE__::LogWriter * wr = __DP_LIB_NAMESPACE__::global_config.log.GetChannel("WebUI");
+	if (wr == nullptr)
+		return HttpServer::generate404(req->method, req->host, req->path);
+	__DP_LIB_NAMESPACE__::LogBufferWriterImpl * l = dynamic_cast<__DP_LIB_NAMESPACE__::LogBufferWriterImpl *>( wr);
+	if (l == nullptr)
+		return HttpServer::generate404(req->method, req->host, req->path);
+	String t = toString(l->getCurrentLine()) + ">";
+	if (l->getCurrentLine() != line)
+		t += l->getStringBuffer();
+	Request resp = makeRequest();
+	resp->body = new char[t.size() + 1];
+	strncpy(resp->body, t.c_str(), t.size());
+	resp->body_length = t.size();
+	return resp;
+
 }

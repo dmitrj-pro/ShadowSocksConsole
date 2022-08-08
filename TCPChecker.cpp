@@ -13,19 +13,19 @@ namespace TCPChecker {
 	void TCPCheckerWorker::Check() {
         DP_LOG_DEBUG << "Start check server " << host << ":" << port << "\n";
 		if (bootstrapDNS.size() > 4) {
-			__DP_LIB_NAMESPACE__::setGlobalDNS(bootstrapDNS);
+			__DP_LIB_NAMESPACE__::global_config.setDNS(bootstrapDNS);
 		}
-		if (IGNORECHECKSERVER || __DP_LIB_NAMESPACE__::TCPClient::IsCanConnect(host, port)) {
-			if (this->task == nullptr || IGNORECHECKSERVER ) {
+		if (checkingMode == ServerCheckingMode::Off || __DP_LIB_NAMESPACE__::TCPClient::IsCanConnect(host, port)) {
+			if (this->task == nullptr || checkingMode == ServerCheckingMode::Off ) {
                 DP_LOG_DEBUG << "Server " << host << ":" << port << " is Allow";
 				callback(TCPStatus::Allow, this);
 			} else {
 				auto & ctrl = ShadowSocksController::Get();
 				auto flags = ctrl.makeCheckStruct();
 				flags.one_loop = true;
-				flags.auto_check_mode = ShadowSocksSettings::AutoCheckingMode::Ip;
+				flags.auto_check_mode = checkingMode == ServerCheckingMode::DeepCheck ? AutoCheckingMode::Ip : AutoCheckingMode::Work;
 				ctrl.check_server(this->srv, this->task, flags);
-				if (ctrl.getConfig().auto_check_mode !=  ShadowSocksSettings::AutoCheckingMode::Off)
+				if (ctrl.getConfig().auto_check_mode !=  AutoCheckingMode::Off)
 					ctrl.SaveCashe();
 				if (srv->check_result.isRun) {
                     DP_LOG_DEBUG << "Deep check Server " << host << ":" << port << " is Allow";
@@ -52,7 +52,7 @@ namespace TCPChecker {
 			ip_addrs.push_back(host);
 		} else {
 			if (bootstrapDNS.size() > 4) {
-				__DP_LIB_NAMESPACE__::setGlobalDNS(bootstrapDNS);
+				__DP_LIB_NAMESPACE__::global_config.setDNS(bootstrapDNS);
 			}
 			ip_addrs = __DP_LIB_NAMESPACE__::resolveDomainList(host);
 			if (ip_addrs.size() == 0) {
@@ -65,7 +65,7 @@ namespace TCPChecker {
 		return ip_addrs;
 	}
 
-	_Server * TCPCheckerLoop::Check(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, bool IGNORECHECKSERVER, std::function<String(String)> replaceVariables) {
+	_Server * TCPCheckerLoop::Check(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, ServerCheckingMode checkingMode, std::function<String(String)> replaceVariables) {
 		Join();
 
 		std::mutex * lock_status = new std::mutex();
@@ -104,7 +104,7 @@ namespace TCPChecker {
 				continue;
 			}
 
-			__DP_LIB_NAMESPACE__::List<String> ip_addrs = resolveIpAddr(host, bootstrapDNS, IGNORECHECKSERVER);
+			__DP_LIB_NAMESPACE__::List<String> ip_addrs = resolveIpAddr(host, bootstrapDNS, checkingMode == ServerCheckingMode::Off);
 			if (ip_addrs.size() == 0)
 				continue;
 
@@ -116,7 +116,7 @@ namespace TCPChecker {
 										parse<UInt>(port),
 										callback,
 										bootstrapDNS,
-										IGNORECHECKSERVER
+										checkingMode
 									  );
 				if (task != nullptr || ( srv->check_result.isRun && srv->check_result.ipAddr.size() > 0 ) )
 					good_workers.push_back(worker);
@@ -149,7 +149,7 @@ namespace TCPChecker {
 		return result;
 	}
 
-	List<_Server*> TCPCheckerLoop::CheckAll(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, bool IGNORECHECKSERVER, std::function<String(String)> replaceVariables) {
+	List<_Server*> TCPCheckerLoop::CheckAll(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, ServerCheckingMode checkingMode, std::function<String(String)> replaceVariables) {
 		Join();
 
 		std::mutex * lock_status = new std::mutex();
@@ -183,7 +183,7 @@ namespace TCPChecker {
 				continue;
 			}
 
-			__DP_LIB_NAMESPACE__::List<String> ip_addrs = resolveIpAddr(host, bootstrapDNS, IGNORECHECKSERVER);
+			__DP_LIB_NAMESPACE__::List<String> ip_addrs = resolveIpAddr(host, bootstrapDNS, checkingMode == ServerCheckingMode::Off);
 			if (ip_addrs.size() == 0)
 				continue;
 
@@ -195,7 +195,7 @@ namespace TCPChecker {
 										parse<UInt>(port),
 										callback,
 										bootstrapDNS,
-										IGNORECHECKSERVER
+										checkingMode
 									  );
 				if (task != nullptr || ( srv->check_result.isRun && srv->check_result.ipAddr.size() > 0 ) )
 					good_workers.push_back(worker);

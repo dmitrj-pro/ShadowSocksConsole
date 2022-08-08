@@ -1,0 +1,2 @@
+export NDK_PROJECT_PATH=.
+~/tmp/android-ndk-r23b/ndk-build NDK_APPLICATION_MK=./Application.mk

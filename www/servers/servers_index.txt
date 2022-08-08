@@ -74,9 +74,6 @@
 									<th scope="col">#</th>
 									<th scope="col">Name</th>
 									<th scope="col">Host:Port</th>
-									<th scope="col">Plugin</th>
-									<th scope="col">Mode</th>
-									<th scope="col">Enable TLS</th>
 									<th scope="col">Path</th>
 									<th scope="col">Status</th>
 									<th scope="col">Action</th>

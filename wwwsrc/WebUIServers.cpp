@@ -49,22 +49,20 @@ Request WebUI::processGetServers(Request req) {
 		if (filter_name.size() > 0 && !filter_name_parser.Check(s->name))
 			continue;
 
-		String plugin = "-";
-		String mode ="";
-		String enable_tls = "";
 		String path = "";
 
 
 		if (dynamic_cast<_V2RayServer * >(s) != nullptr) {
 			_V2RayServer * t = dynamic_cast<_V2RayServer *>(s);
-			plugin = "v2ray";
-			mode = t->mode;
-			enable_tls = t->isTLS ? "+" : "-";
 			path = t->isTLS ? "https://" : "http://";
 			path += t->host + ":";
 			path += toString(t->port);
 			path += t->path;
 			path = ShadowSocksController::Get().getConfig().replaceVariables(path);
+		} else {
+			path = "ss://";
+			path += s->host + ":";
+			path += toString(s->port);
 		}
 		String status = "";
 		String status_color = "";
@@ -86,9 +84,6 @@ Request WebUI::processGetServers(Request req) {
 																toString(s->id),
 																s->name,
 																String(s->host + ":" + toString(s->port)),
-																plugin,
-																mode,
-																enable_tls,
 																path,
 																status,
 																toString(s->id),

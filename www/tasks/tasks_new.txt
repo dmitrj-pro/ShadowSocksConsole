@@ -64,6 +64,17 @@
 			<span class="form-radio-sign">no</span>
 		</label>
 	</div>
+	<div class="form-check">
+		<label>Support UDP:</label><br>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="enable_udp" value="yes">
+			<span class="form-radio-sign">yes</span>
+		</label>
+		<label class="form-radio-label ml-3">
+			<input class="form-radio-input" type="radio" name="enable_udp" value="no">
+			<span class="form-radio-sign">no</span>
+		</label>
+	</div>
 	
 	<div class="form-check">
 		<label>Enable autostart:</label><br>

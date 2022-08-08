@@ -2,6 +2,10 @@
 	<div class="form-check">
 		<label>Check mode:</label><br>
 		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="mode" value="Work">
+			<span class="form-radio-sign">Deep fast (No IP)</span>
+		</label>
+		<label class="form-radio-label">
 			<input class="form-radio-input" type="radio" name="mode" value="Ip" checked="">
 			<span class="form-radio-sign">Ip</span>
 		</label>

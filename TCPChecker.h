@@ -4,6 +4,7 @@
 #include <functional>
 #include <_Driver/ThreadWorker.h>
 #include <mutex>
+#include "ShadowSocksMain.h"
 
 using __DP_LIB_NAMESPACE__::String;
 using __DP_LIB_NAMESPACE__::List;
@@ -20,7 +21,7 @@ namespace TCPChecker {
 			std::function<void (TCPStatus, TCPCheckerWorker * )> callback;
 			UInt port;
 			String host;
-			bool IGNORECHECKSERVER;
+			ServerCheckingMode checkingMode;
 			String bootstrapDNS;
 			_Server* srv = nullptr;
 			_Task * task = nullptr;
@@ -32,7 +33,7 @@ namespace TCPChecker {
 							UInt port,
 							 std::function<void (TCPStatus, TCPCheckerWorker * )> callback,
 							 const String & bootstrapDNS,
-							 bool IGNORECHECKSERVER = false)
+							 ServerCheckingMode checkingMode = ServerCheckingMode::TCPCheck)
 				:
 					task(task),
 					srv(srv),
@@ -40,7 +41,7 @@ namespace TCPChecker {
 					callback(callback),
 					host(host),
 					port(port),
-					IGNORECHECKSERVER(IGNORECHECKSERVER) {}
+					checkingMode(checkingMode) {}
 			void Check();
 			inline _Server* getServer() { return srv; }
 			inline String getHost() const { return host; }
@@ -76,8 +77,8 @@ namespace TCPChecker {
 				bad_workers.clear();
 			}
 			// task = null if not need deep check
-			_Server * Check(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, bool IGNORECHECKSERVER, std::function<String(String)> replaceVariables);
-			List<_Server*> CheckAll(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, bool IGNORECHECKSERVER, std::function<String(String)> replaceVariables);
+			_Server * Check(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, ServerCheckingMode checkingMode, std::function<String(String)> replaceVariables);
+			List<_Server*> CheckAll(_Task * task, List<_Server*> & servers, const String & bootstrapDNS, ServerCheckingMode checkingMode, std::function<String(String)> replaceVariables);
 
 	};
 

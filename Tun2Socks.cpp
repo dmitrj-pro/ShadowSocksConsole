@@ -1,4 +1,5 @@
 ﻿#include "Tun2Socks.h"
+#include <Addon/LiteralReader.h>
 #include <Converter/Converter.h>
 #include <chrono>
 #include <Parser/SmartParser.h>
@@ -6,6 +7,8 @@
 #include <algorithm>
 #include <Log/Log.h>
 #include <Network/Utils.h>
+#include <_Driver/Path.h>
+#include <_Driver/Files.h>
 
 using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -151,7 +154,7 @@ Ethernet adapter tuntap:
 			}
 			line = trim(line);
 
-			auto all = LiteralReader::readAllLiterals(line);
+			auto all = LiteralReader::readAllLiterals(line, false);
 			if (all.size() != 5)
 				continue;
 			// Пропускаем заголовок
@@ -182,7 +185,7 @@ Ethernet adapter tuntap:
 			line = trim(line);
 			// С большой вероятностью это наименовение интерфейса
 			if (__DP_LIB_NAMESPACE__::endWithN(line, ":") && !__DP_LIB_NAMESPACE__::endWithN(line, ". :")) {
-				auto all = LiteralReader::readAllLiterals(line);
+				auto all = LiteralReader::readAllLiterals(line, false);
 				if (all.size() >= 1) {
 					auto it = all.rbegin();
 					prevInterfaceName = *(it->begin());
@@ -218,7 +221,7 @@ Ethernet adapter tuntap:
 			String line = "";
 			getline(str, line);
 			DP_LOG_DEBUG << line << "\n";
-			auto all = LiteralReader::readAllLiterals(line);
+			auto all = LiteralReader::readAllLiterals(line, false);
 			int status = 0;
 			int i = 0;
 			//Destination	 Gateway		 Genmask		 Flags Metric Ref	Use Iface
@@ -261,23 +264,33 @@ Ethernet adapter tuntap:
 	}
 #endif
 
-List<char> LiteralReader::delimers{'[', ',', ']', '=', '>', '<', ':', ';', '+'/*, '-'*/, ' ', '\n', '\r' };
+#ifdef DP_ANDROID
+	bool __signal_vpn_started = false;
+#endif
 
 void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCrash) {
 	if (this->config.dns.size() < 1 && config.isDNS2Socks) {
 		throw EXCEPTION("Need one or more dns servers");
 		return;
 	}
+
+#ifndef DP_ANDROID
 	#ifdef DP_LIN
 		getCurrentDefaultIface(this->iface_name, this->iface_gw);
 	#endif
+#endif
 	run = new Application(appPath);
 	Application & ap = *run;
 	{
 		String tmtp = proxyServer + ":";
 		tmtp = tmtp + toString(proxyPort);
-		ap << "-proxyServer" << tmtp;
+		#ifdef DP_ANDROID
+			ap << "--socks-server-addr" << tmtp;
+		#else
+			ap << "-proxyServer" << tmtp;
+		#endif
 	}
+#ifndef DP_ANDROID
 	ap << "-proxyType" << "socks";
 	ap << "-tunAddr" << "192.168.198.2";
 	if (config.isDNS2Socks || this->config.dns.size() > 0) {
@@ -296,8 +309,34 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 	ap << "-tunGw" << "192.168.198.1";
 	ap << "-tunMask" << "255.255.255.0";
 	ap << "-tunName" << this->config.tunName;
-	ap << "-udpTimeout" << this->udpTimeout;
+	if (this->enable_udp)
+		ap << "-udpTimeout" << this->udpTimeout;
 	ap << "-loglevel" << "none";
+#endif
+	#ifdef DP_ANDROID
+		__signal_vpn_started = false;
+		__DP_LIB_NAMESPACE__::Path __p {getWritebleDirectory()};
+		__p.Append("sock_path");
+		__DP_LIB_NAMESPACE__::RemoveFile(__p.Get());
+		ap << "--sock-path" << __p.Get();
+		DP_LOG_FATAL << "[TUN_ADDR:192.168.198.2]";
+		ap << "--netif-ipaddr" << "192.168.198.2";
+		ap << "--dnsgw" << "127.0.0.1:35081";
+		DP_LOG_FATAL << "[TUN_GW:192.168.198.1]";
+		//ap << "--netif-netmask" << "255.255.255.0";
+		//if (this->enable_udp)
+			ap << "--enable-udprelay";
+		// ap << "--netif-ip6addr" << ;
+		for (const String & ip : this->config.ignoreIP)
+			DP_LOG_FATAL << "[IGNORE_IP:" << ip << "]";
+		DP_LOG_FATAL << "[WAIT_SERVICE]";
+		while (true) {
+			if (__signal_vpn_started)
+				break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		__signal_vpn_started = false;
+	#endif
 
 	ap.SetOnCloseFunc([this, _onCrash]() {
 		ExitStatus status;
@@ -351,6 +390,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 			_onCrash(config.name, status);
 			return;
 		}
+	#ifndef DP_ANDROID
 		// Ждем, пока поднимится интерфейс
 		while (true) {
 			Application p ("/sbin/ifconfig");
@@ -384,7 +424,16 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 		while ((*state) == 0)
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		delete state;
+	#endif
 
+	#endif
+	
+	#ifdef DP_ANDROID
+		if ((tun2socks == nullptr ? true : !tun2socks->isFinished()) && (!ap.isFinished())) {
+			DP_LOG_FATAL << "[T2S_STARTED]";
+			_onSuccess();
+		}
+		return;
 	#endif
 
 	{
@@ -398,7 +447,9 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 				p << "add" << (ip + "/32") << "gw" << this->iface_gw;
 				p << "dev" << this->iface_name;
 			#endif
-			p.Exec();
+			#ifndef DP_ANDROID
+				p.Exec();
+			#endif
 
 		}
 	}
@@ -475,6 +526,12 @@ void Tun2Socks::ThreadLoop() {
 }
 
 void Tun2Socks::Stop() {
+	#ifdef DP_ANDROID
+		__DP_LIB_NAMESPACE__::Path __p {getWritebleDirectory()};
+		__p.Append("sock_path");
+		__DP_LIB_NAMESPACE__::RemoveFile(__p.Get());
+	#endif
+	
 	if (_is_exit)
 		return;
 	if (config.preStopCommand.size() > 0) {
@@ -492,6 +549,7 @@ void Tun2Socks::Stop() {
 	}
 
 	_is_exit = true;
+	#ifndef DP_ANDROID
 	for (const String & ip : this->config.ignoreIP){
 		#ifdef DP_WIN
 			Application p ("C:\\Windows\\System32\\ROUTE.EXE");
@@ -523,6 +581,7 @@ void Tun2Socks::Stop() {
 		#endif
 		p.Exec();
 	}
+	#endif
 	if (run == nullptr)
 		return;
 	run->KillNoJoin();

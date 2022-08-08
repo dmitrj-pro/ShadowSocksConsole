@@ -64,6 +64,8 @@ class _ShadowSocksController {
 		void SaveCashe();
 		void ExportConfig(__DP_LIB_NAMESPACE__::Ostream & out, bool is_mobile, bool resolve_dns, const String & default_dns = "94.140.14.14", const String & v2ray_path = "v2ray-plugin");
 		void OpenCashe();
+		void OpenLogFile();
+		void CloseLogFile();
 		void SaveConfig(const String & config);
 		bool isEncrypted();
 		bool isCreated();
@@ -72,7 +74,7 @@ class _ShadowSocksController {
 		inline void MakeExit() { Stop(); _make_exit(); }
 		inline void SetExitFinc(std::function<void()> func) { _make_exit = func; }
 		void AutoStart(OnShadowSocksError onCrash);
-		void StartOnBoot(OnShadowSocksError onCrash);
+		void StartOnBoot();
 		void SaveBootConfig();
 		ShadowSocksClient * StartById(int id, OnShadowSocksRunned onSuccess, OnShadowSocksError onCrash, SSClientFlags flags);
 		ShadowSocksClient * StartByName(const String & name, OnShadowSocksRunned onSuccess, OnShadowSocksError onCrash, SSClientFlags flags);
@@ -86,7 +88,7 @@ class _ShadowSocksController {
 			String _server_name = "";
 			String _task_name = "";
 			bool save_last_check = true;
-			ShadowSocksSettings::AutoCheckingMode auto_check_mode = ShadowSocksSettings::AutoCheckingMode::Ip;
+			AutoCheckingMode auto_check_mode = AutoCheckingMode::Ip;
 			String defaultHost = "127.0.0.1";
 			String tempPath = "./";
 			String wgetPath = "wget";
@@ -106,7 +108,10 @@ class _ShadowSocksController {
 			__DP_LIB_NAMESPACE__::Path cpath = __DP_LIB_NAMESPACE__::Path(GetCashePath());
 			if (cpath.IsFile())
 				OpenCashe();
-			if (this->settings.auto_check_mode != ShadowSocksSettings::AutoCheckingMode::Off && this->settings.auto_check_mode != ShadowSocksSettings::AutoCheckingMode::Passiv) {
+			#ifdef DP_ANDROID
+				return;
+			#endif
+			if (this->settings.auto_check_mode != AutoCheckingMode::Off && this->settings.auto_check_mode != AutoCheckingMode::Passiv) {
 				checkerThread = new __DP_LIB_NAMESPACE__::Thread([this] () {
 					CheckLoopStruct args = makeCheckStruct();
 					args.one_loop = false;
