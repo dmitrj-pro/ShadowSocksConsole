@@ -355,6 +355,12 @@ void ShadowSocksMain::consoleMain() {
 }
 
 bool ShadowSocksSettings::enablePreStartStopScripts = false;
+bool ShadowSocksSettings::_disable_log_page = false;
+bool ShadowSocksSettings::_disable_import_page = false;
+bool ShadowSocksSettings::_disable_exit_page = false;
+bool ShadowSocksSettings::_disable_exit_page_hard = false;
+bool ShadowSocksSettings::_disable_export_page = false;
+bool ShadowSocksSettings::_disable_utils_page = false;
 void ShadowSocksMain::readHostData() {
 	__DP_LIB_NAMESPACE__::Path file = __DP_LIB_NAMESPACE__::Path(fileHostData());
 	if (file.IsFile()) {
@@ -362,7 +368,15 @@ void ShadowSocksMain::readHostData() {
 		in.open(file.Get());
 		SmartParser webhost ("web_host${1:null<string>}=${host:trim<string>}:${port:int}");
 		SmartParser cchost ("service_host${1:null<string>}=${host:trim<string>}:${port:int}");
-		SmartParser enable_scripting ("tun_scripts${1:null<string>}=${value:int}");
+		SmartParser enable_scripting ("tun_scripts${1:null<string>}=${value:trim<int>}");
+
+		SmartParser disable_import_page("disable_import_page${1:null<string>}=${value:trim<int>}");
+		SmartParser disable_export_page("disable_export_page${1:null<string>}=${value:trim<int>}");
+		SmartParser disable_utils_page("disable_utils_page${1:null<string>}=${value:trim<int>}");
+		SmartParser disable_log_page("disable_log_page${1:null<string>}=${value:trim<int>}");
+		SmartParser disable_exit_page("disable_exit_page${1:null<string>}=${value:trim<int>}");
+		SmartParser disable_exit_page_hard_mode("disable_exit_page_hard_mode${1:null<string>}=${value:trim<int>}");
+
 		while (!in.eof()) {
 			String line;
 			getline(in, line);
@@ -374,16 +388,39 @@ void ShadowSocksMain::readHostData() {
 				host_service.host = cchost.Get("host");
 				host_service.port = parse<unsigned short>(cchost.Get("port"));
 			}
-			if (enable_scripting.Check(line)) {
+			if (enable_scripting.Check(line))
 				ShadowSocksSettings::enablePreStartStopScripts = parse<bool>(enable_scripting.Get("value"));
+			if (disable_import_page.Check(line))
+				ShadowSocksSettings::_disable_import_page = parse<bool>(disable_import_page.Get("value"));
+			if (disable_log_page.Check(line))
+				ShadowSocksSettings::_disable_log_page = parse<bool>(disable_log_page.Get("value"));
+			//Warn: before disable_exit_page: SmartParser disable_exit_page_hard_mode.OK && disable_exit_page.OK
+			if (disable_exit_page_hard_mode.Check(line)) {
+				ShadowSocksSettings::_disable_exit_page_hard = parse<bool>(disable_exit_page_hard_mode.Get("value"));
+				continue;
 			}
+			if (disable_exit_page.Check(line))
+				ShadowSocksSettings::_disable_exit_page = parse<bool>(disable_exit_page.Get("value"));
+			if (disable_export_page.Check(line))
+				ShadowSocksSettings::_disable_export_page = parse<bool>(disable_export_page.Get("value"));
+			if (disable_utils_page.Check(line))
+				ShadowSocksSettings::_disable_utils_page = parse<bool>(disable_utils_page.Get("value"));
+
 		}
 	} else {
 		host_web.host = "127.0.0.1";
 		host_web.port = 0;
 		host_service.host = "127.0.0.1";
 		host_service.port = 8898;
+		ShadowSocksSettings::_disable_import_page = false;
+		ShadowSocksSettings::_disable_log_page = false;
+		ShadowSocksSettings::_disable_exit_page = false;
+		ShadowSocksSettings::_disable_exit_page_hard = false;
+		ShadowSocksSettings::_disable_export_page = false;
+		ShadowSocksSettings::_disable_utils_page = false;
 		#ifdef DP_ANDROID
+			ShadowSocksSettings::_disable_exit_page = true;
+			ShadowSocksSettings::_disable_exit_page_hard = true;
 			host_web.port = 35080;
 			host_service.port = 0;
 		#endif
@@ -404,6 +441,12 @@ void ShadowSocksMain::writeHostData() {
 	out << "web_host=" << host_web.host << ":" << host_web.port << "\n";
 	out << "service_host=" << host_service.host << ":" << host_service.port << "\n";
 	out << "tun_scripts=" << toString(ShadowSocksSettings::enablePreStartStopScripts) << "\n";
+	out << "disable_import_page=" << toString(ShadowSocksSettings::_disable_import_page) << "\n";
+	out << "disable_log_page=" << toString(ShadowSocksSettings::_disable_log_page) << "\n";
+	out << "disable_exit_page=" << toString(ShadowSocksSettings::_disable_exit_page) << "\n";
+	out << "disable_exit_page_hard_mode=" << toString(ShadowSocksSettings::_disable_exit_page_hard) << "\n";
+	out << "disable_export_page=" << toString(ShadowSocksSettings::_disable_export_page) << "\n";
+	out << "disable_utils_page=" << toString(ShadowSocksSettings::_disable_utils_page) << "\n";
 	out.close();
 	SetNeedToExit(true);
 }
@@ -988,6 +1031,11 @@ String ShadowSocksSettings::GetSource() {
 		Set(key + "tempPath", this->tempPath);
 		SetType(key + "UDPTimeout", this->udpTimeout);
 		SetType(key + "WebSessionTimeout", this->web_session_timeout_m);
+		SetType(key + "WebEnableLogPage", this->enable_log_page);
+		SetType(key + "WebEnableImportPage", this->enable_import_page);
+		SetType(key + "WebEnableUtilsPage", this->enable_utils_page);
+		SetType(key + "WebEnableExportPage", this->enable_export_page);
+		SetType(key + "WebEnableExitPage", this->enable_exit_page);
 		SetType(key + "hideDNS2Socks", this->hideDNS2Socks);
 		SetType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath);
 		SetType(key + "autoDetectTunInterface", this->autoDetectTunInterface);
@@ -1192,6 +1240,11 @@ void ShadowSocksSettings::Load(const String & text) {
 		ReadN(key + "Dns2Socks", this->dns2socksPath);
 		ReadN(key + "WGetPath", this->wgetPath);
 		ReadN(key + "tempPath", this->tempPath);
+		ReadNType(key + "WebEnableLogPage", this->enable_log_page, bool);
+		ReadNType(key + "WebEnableImportPage", this->enable_import_page, bool);
+		ReadNType(key + "WebEnableUtilsPage", this->enable_utils_page, bool);
+		ReadNType(key + "WebEnableExportPage", this->enable_export_page, bool);
+		ReadNType(key + "WebEnableExitPage", this->enable_exit_page, bool);
 		ReadNType(key + "UDPTimeout", this->udpTimeout, UInt);
 		ReadNType(key + "WebSessionTimeout", this->web_session_timeout_m, UInt);
 		ReadNType(key + "hideDNS2Socks", this->hideDNS2Socks, bool);

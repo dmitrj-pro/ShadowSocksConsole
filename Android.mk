@@ -12,7 +12,6 @@ LOCAL_SRC_FILES  := \
 			./SSClient.cpp \
 			./ConsoleLoop.cpp \
 			./ShadowSocksController.cpp \
-			./sha1.cpp \
 			\
 			./wwwsrc/WebUI.cpp \
 			./wwwsrc/WebUIServers.cpp \
@@ -21,17 +20,17 @@ LOCAL_SRC_FILES  := \
 			./wwwsrc/WebUIVPN.cpp \
 			./wwwsrc/WebUIRuns.cpp \
 			\
-			./WGetDownloader/Downloader.cpp \
-			./WGetDownloader/libproxy/Chain.cpp \
-			./WGetDownloader/libproxy/ProtoParsers/SocketParser.cpp \
-			./WGetDownloader/libproxy/ProtoParsers/SocketParserHttp.cpp \
-			./WGetDownloader/libproxy/ProtoParsers/SocketParserMultiplex.cpp \
-			./WGetDownloader/libproxy/ProtoParsers/SocketParserSocks5.cpp \
-			./WGetDownloader/libproxy/ProtoParsers/SocketParserTunnel.cpp \
-			./WGetDownloader/libproxy/Connectors/Connector.cpp \
-			./WGetDownloader/libproxy/Connectors/ConnectorDirect.cpp \
-			./WGetDownloader/libproxy/Connectors/ConnectorHttpProxy.cpp \
-			./WGetDownloader/libproxy/Connectors/ConnectorSocks.cpp \
+			../../Addon/WGetDownloader.cpp \
+			../../Addon/libproxy/Chain.cpp \
+			../../Addon/libproxy/ProtoParsers/SocketParser.cpp \
+			../../Addon/libproxy/ProtoParsers/SocketParserHttp.cpp \
+			../../Addon/libproxy/ProtoParsers/SocketParserMultiplex.cpp \
+			../../Addon/libproxy/ProtoParsers/SocketParserSocks5.cpp \
+			../../Addon/libproxy/ProtoParsers/SocketParserTunnel.cpp \
+			../../Addon/libproxy/Connectors/Connector.cpp \
+			../../Addon/libproxy/Connectors/ConnectorDirect.cpp \
+			../../Addon/libproxy/Connectors/ConnectorHttpProxy.cpp \
+			../../Addon/libproxy/Connectors/ConnectorSocks.cpp \
 			\
 			./www/textfill.cpp \
 			\
@@ -39,6 +38,8 @@ LOCAL_SRC_FILES  := \
 			../../Addon/httpsrv/HttpPathRouter.cpp \
 			../../Addon/httpsrv/HttpRequest.cpp \
 			../../Addon/httpsrv/HttpServer.cpp \
+			\
+			../../Addon/sha1.cpp \
 			\
 			../../version.cpp \
 			../../DPLibConfig.cpp \
@@ -55,6 +56,7 @@ LOCAL_SRC_FILES  := \
 			../../Crypt/SCH/v1/UniKey_v1.cpp \
 			../../Crypt/Converters/PrimitiveConverter.cpp \
 			../../Log/stlog.cpp \
+			../../DPLibConfig.cpp \
 			../../Network/TCPClient.cpp \
 			../../Network/TCPServer.cpp \
 			../../Network/Utils.cpp \

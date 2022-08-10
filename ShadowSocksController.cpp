@@ -11,6 +11,7 @@
 #include <Addon/libproxy/Connectors/ConnectorSocks.h>
 #include <Addon/libproxy/Connectors/ConnectorDirect.h>
 #include <Addon/libproxy/Chain.h>
+#include <Addon/sha1.hpp>
 
 using __DP_LIB_NAMESPACE__::Path;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -129,6 +130,12 @@ void _ShadowSocksController::SaveBootConfig() {
 		sett.auto_check_mode = AutoCheckingMode::Off;
 		sett.auto_check_interval_s = 0;
 		sett.web_session_timeout_m = 0;
+		sett.enable_log_page = false;
+		sett.enable_exit_page = false;
+		sett.enable_exit_page_hard = false;
+		sett.enable_import_page = false;
+		sett.enable_export_page = false;
+		sett.enable_utils_page = false;
 
 		for (const _Task * tk : settings.tasks)
 			if (tk->autostart) {
@@ -391,7 +398,13 @@ void _ShadowSocksController::CloseLogFile() {
 }
 
 void _ShadowSocksController::OpenConfig(const String & password) {
-	if (settings.tasks.size() > 0) {
+	if (settings.servers.size() > 0) {
+		String sha1 = SHA1::from_file(GetConfigPath());
+		if (sha1 != this->__sha1_config_file) {
+			DP_LOG_FATAL << "Injection: config file replaced";
+			throw EXCEPTION("config file replaced");
+		}
+
 		ShadowSocksSettings tmp;
 		tmp.Load(GetSourceConfig(password));
 	} else {
@@ -399,13 +412,11 @@ void _ShadowSocksController::OpenConfig(const String & password) {
 		settings.Load(GetSourceConfig(password));
 		this->password = password;
 
-		if (settings.enableLogging) {
+		if (settings.enableLogging)
 			OpenLogFile();
-		}
-		if (settings.bootstrapDNS.size() > 4) {
+		if (settings.bootstrapDNS.size() > 4)
 			__DP_LIB_NAMESPACE__::global_config.setDNS(settings.bootstrapDNS);
-		}
-
+		this->__sha1_config_file = SHA1::from_file(GetConfigPath());
 	}
 }
 
@@ -455,6 +466,7 @@ void _ShadowSocksController::SaveConfig(const String & _res) {
 	out.close();
 	if (out.fail())
 		throw EXCEPTION("Fail to save config file");
+	this->__sha1_config_file = SHA1::from_file(GetConfigPath());
 }
 
 void _ShadowSocksController::SaveConfig() {

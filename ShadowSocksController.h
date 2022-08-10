@@ -22,6 +22,7 @@ class _ShadowSocksController {
 	private:
 		ShadowSocksSettings settings;
 		String password = "";
+		String __sha1_config_file = "";
 		List<__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient *> > clients;
 		std::mutex clients_lock;
 		std::function<void()> _make_exit;

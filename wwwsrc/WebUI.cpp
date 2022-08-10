@@ -99,6 +99,7 @@ void WebUI::_start() {
 
 	srv->add_route("*", "/tasks.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetTasks(r); });
 	srv->add_route("*", "/task/start_params", "GET", [this](Request r) { CHECK_AUTH; return this->processGetTaskStartPage(r); });
+	srv->add_route("*", "/task/start_rnd.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetStartRND(r); });
 	srv->add_route("*", "/task/start_params", "POST", [this](Request r) { CHECK_AUTH; return this->processPostTaskStartPage(r); });
 	srv->add_route("*", "/task/start", "POST", [this](Request r) { CHECK_AUTH; return this->processPostTaskStart(r); });
 	srv->add_route("*", "/task/stop", "POST", [this](Request r) { CHECK_AUTH; return this->processPostTaskStop(r); });
@@ -321,7 +322,10 @@ void WebUI::UpdateTaskStatus(const String & server, const String & msg) {
 		notifyUser(it->cookie, server + " " + msg);
 }
 
-Request WebUI::processGetExport(Request) {
+Request WebUI::processGetExport(Request req) {
+	if (ShadowSocksSettings::_disable_export_page || !ShadowSocksController::Get().getConfig().enable_export_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
+
 	String html = makePage("Export", "export/page.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -331,6 +335,9 @@ Request WebUI::processGetExport(Request) {
 }
 
 Request WebUI::processPostExport(Request req) {
+	if (ShadowSocksSettings::_disable_export_page || !ShadowSocksController::Get().getConfig().enable_export_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
+
 	auto user_id = req->cookie["auth"];
 
 	if (!ConteinsKey(req->post, "mode"))
@@ -385,7 +392,9 @@ Request WebUI::processPostExport(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetImport(Request) {
+Request WebUI::processGetImport(Request req) {
+	if (ShadowSocksSettings::_disable_import_page || !ShadowSocksController::Get().getConfig().enable_import_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
 	String html = makePage("Export", "import/page.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -395,6 +404,8 @@ Request WebUI::processGetImport(Request) {
 }
 
 Request WebUI::processPostImport(Request req) {
+	if (ShadowSocksSettings::_disable_import_page || !ShadowSocksController::Get().getConfig().enable_import_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
 
 	if (!ConteinsKey(req->post, "file"))
 		return HttpServer::generate404(req->method, req->host, req->path);
@@ -481,7 +492,11 @@ Request WebUI::processGetLogout(Request req) {
 	return resp;
 }
 
-Request WebUI::processGetExit(Request) {
+Request WebUI::processGetExit(Request req) {
+	if ( ( ShadowSocksSettings::_disable_exit_page && ShadowSocksSettings::_disable_exit_page_hard ) ||
+			( !ShadowSocksController::Get().getConfig().enable_exit_page && ShadowSocksController::Get().getConfig().enable_exit_page_hard ) )
+		return HttpServer::generate404(req->method, req->host, req->path);
+
 	String html = makePage("Exit", "Close ShadowSocks", "exit/exit.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -489,7 +504,10 @@ Request WebUI::processGetExit(Request) {
 	resp->body_length = html.size();
 	return resp;
 }
-Request WebUI::processPostExit(Request) {
+Request WebUI::processPostExit(Request req) {
+	if ( ( ShadowSocksSettings::_disable_exit_page && ShadowSocksSettings::_disable_exit_page_hard ) ||
+			( !ShadowSocksController::Get().getConfig().enable_exit_page && ShadowSocksController::Get().getConfig().enable_exit_page_hard ) )
+		return HttpServer::generate404(req->method, req->host, req->path);
 	Thread * th = new Thread([]() {
 		__DP_LIB_NAMESPACE__::ServiceSinglton::Get().LoopWait(500);
 		__DP_LIB_NAMESPACE__::ServiceSinglton::Get().ExecuteClose();
@@ -506,6 +524,9 @@ Request WebUI::processPostExit(Request) {
 }
 
 Request WebUI::processGetUtils(Request req, const UtilsStruct & res) {
+	if (ShadowSocksSettings::_disable_utils_page || !ShadowSocksController::Get().getConfig().enable_utils_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
+
 	OStrStream out;
 	for (const String & ip : res.resolve_result)
 		out << "<p>" << ip << "</p>";
@@ -559,6 +580,8 @@ WebUI::UtilsStruct WebUI::makeUtilsStruct() const {
 }
 
 Request WebUI::processPostUtils(Request req) {
+	if (ShadowSocksSettings::_disable_utils_page || !ShadowSocksController::Get().getConfig().enable_utils_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
 	if (!ConteinsKey(req->post, "mode"))
 		return HttpServer::generate404(req->method, req->host, req->path);
 
@@ -697,6 +720,9 @@ Request WebUI::processPostUtils(Request req) {
 }
 
 Request WebUI::processGetLogsPage(Request req) {
+	if (ShadowSocksSettings::_disable_log_page || !ShadowSocksController::Get().getConfig().enable_log_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
+
 	String html = makePage("Logs", "logs/index.txt", List<String>());
 	Request resp = makeRequest();
 	resp->body = new char[html.size() + 1];
@@ -706,6 +732,9 @@ Request WebUI::processGetLogsPage(Request req) {
 }
 
 Request WebUI::processGetLogsContent(Request req) {
+	if (ShadowSocksSettings::_disable_log_page || !ShadowSocksController::Get().getConfig().enable_log_page)
+		return HttpServer::generate404(req->method, req->host, req->path);
+
 	UInt line = 0;
 	if (ConteinsKey(req->get, "line")) {
 		line = parse<UInt>(req->get["line"]);

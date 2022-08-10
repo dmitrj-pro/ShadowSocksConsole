@@ -845,6 +845,11 @@ void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	SHOWSETTINGS("Auto detect Tap interface", conf.autoDetectTunInterface);
 	SHOWSETTINGS("Udp Timeout (s)", conf.udpTimeout);
 	SHOWSETTINGS("Web session timeout (m)", conf.web_session_timeout_m);
+	SHOWSETTINGS("Web enable log page", conf.enable_log_page);
+	SHOWSETTINGS("Web enable export page", conf.enable_export_page);
+	SHOWSETTINGS("Web enable import page", conf.enable_import_page);
+	SHOWSETTINGS("Web enable utils page", conf.enable_utils_page);
+	SHOWSETTINGS("Web enable exit page", conf.enable_exit_page);
 	SHOWSETTINGS("Servers checking mode", ServerCheckingMode_to_str(conf.checkServerMode));
 	SHOWSETTINGS("Bootstrap DNS", conf.bootstrapDNS);
 	SHOWSETTINGS("Auto check servers", AutoCheckingMode_to_str(conf.auto_check_mode));
@@ -895,6 +900,22 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 
 	cmd = arg.read("Web session timeout (m)", toString(conf.web_session_timeout_m));
 	if (cmd.size() > 0) conf.web_session_timeout_m = parse<UInt>(cmd);
+
+
+	cmd = arg.read("Web enable log page", toString(conf.enable_log_page));
+	if (cmd.size() > 0) conf.enable_log_page = parse<bool>(cmd);
+
+	cmd = arg.read("Web enable import page", toString(conf.enable_import_page));
+	if (cmd.size() > 0) conf.enable_import_page = parse<bool>(cmd);
+
+	cmd = arg.read("Web enable export page", toString(conf.enable_export_page));
+	if (cmd.size() > 0) conf.enable_export_page = parse<bool>(cmd);
+
+	cmd = arg.read("Web enable utils page", toString(conf.enable_utils_page));
+	if (cmd.size() > 0) conf.enable_utils_page = parse<bool>(cmd);
+
+	cmd = arg.read("Web enable exit page", toString(conf.enable_exit_page));
+	if (cmd.size() > 0) conf.enable_exit_page = parse<bool>(cmd);
 
 	cmd = arg.read("Udp Timeout (s)", toString(conf.udpTimeout));
 	if (cmd.size() > 0) conf.udpTimeout = parse<UInt>(cmd);

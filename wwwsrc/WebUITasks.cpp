@@ -133,6 +133,62 @@ Request WebUI::processPostTaskStart(Request req) {
 	return resp;
 }
 
+Request WebUI::processGetStartRND(Request req) {
+	auto user_id = req->cookie["auth"];
+	String filter_group = "";
+	bool force_cookie = false;
+	if (ConteinsKey(req->get, "group"))
+		filter_group = req->get["group"];
+	String filter_name = "";
+	if (ConteinsKey(req->get, "name"))
+		filter_name = req->get["name"];
+	if (ConteinsKey(req->cookie, "t_group") && filter_group.size() == 0 && !ConteinsKey(req->get, "group"))
+		return makeRedirect(req, "/tasks.html?group=" + req->cookie["t_group"] + (filter_name.size() == 0 ? "" : "&name=" + filter_name));
+	if (filter_group.size() == 0 && ConteinsKey(req->get, "group"))
+		force_cookie = true;
+	SmartParser filter_name_parser{"*" + filter_name + "*"};
+
+
+	const auto & tasks = ShadowSocksController::Get().getConfig().tasks;
+	Vector<_Task * > task_for_start;
+
+	for (_Task * t : tasks) {
+		if (filter_group.size() > 0 && filter_group != t->group)
+			continue;
+		if (filter_name.size() > 0 && !filter_name_parser.Check(t->name))
+			continue;
+		task_for_start.push_back(t);
+	}
+
+	auto & ctrl = ShadowSocksController::Get();
+
+	for (unsigned int i = 0 ; i < task_for_start.size(); i ++) {
+		_Task * t = task_for_start[rand() % task_for_start.size()];
+		DP_LOG_DEBUG << "WebUI (" << user_id << "): Start random task by group " << filter_group << " and name " << filter_name << ": " << t->name;
+		try{
+			auto funcCrash = [this, user_id] (const String & name, const ExitStatus & status) {
+				auto & ctrl = ShadowSocksController::Get();
+				ctrl.StopByName(name);
+				notifyUser(user_id, "Fail to start task " + name + ": " + status.str);
+			};
+
+			SSClientFlags flags;
+
+			ctrl.StartByName(t->name, [this, user_id] (const String & name) {
+				notifyUser(user_id, "Task " + name + " succesfully started\n");
+			}, funcCrash, flags);
+
+			return makeRedirect(req, "/tasks.html");
+		} catch (__DP_LIB_NAMESPACE__::LineException e) {
+			notifyUser(user_id, "Fail to start task " + t->name + ": " + e.toString());
+		} catch (...) {
+			notifyUser(user_id, "Fail to start task " + t->name);
+		}
+	}
+
+	return makeRedirect(req, "/tasks.html");
+}
+
 Request WebUI::processGetTaskDelete(Request req) {
 	if (!ConteinsKey(req->get, "delete"))
 		return HttpServer::generate404(req->method, req->host, req->path);
@@ -262,7 +318,7 @@ Request WebUI::processPostTaskEdit(Request req) {
 
 
 	readParametr(tk->name, "name", tk);
-	readParametr(tk->group, "group", tk);
+	readParametr_n(tk->group, "group");
 	readParametr(tk->method, "method", tk);
 	readParametr(tk->password, "password", tk);
 	readParametr_boolv(tk->enable_ipv6, "ipv6", false);
@@ -397,7 +453,7 @@ Request WebUI::processPostNewTaskPage(Request req) {
 	auto & ctrl = ShadowSocksController::Get();
 
 	readParametr(tk->name, "name", tk);
-	readParametr(tk->group, "group", tk);
+	readParametr_n(tk->group, "group");
 	readParametr(tk->method, "method", tk);
 	readParametr(tk->password, "password", tk);
 	readParametr_boolv(tk->enable_ipv6, "ipv6", false);

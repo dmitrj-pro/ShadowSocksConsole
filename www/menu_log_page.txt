@@ -1,0 +1,6 @@
+						<li class="nav-item">
+							<a href="/logs.html">
+								<i class="la la la-history"></i>
+								<p>Logs</p>
+							</a>
+						</li>

@@ -324,6 +324,19 @@ struct ShadowSocksSettings{
 	UInt countRestartAutostarted = 3;
 	UInt web_session_timeout_m = 60;
 
+	bool enable_export_page = true;
+	static bool _disable_export_page;
+	bool enable_utils_page = true;
+	static bool _disable_utils_page;
+	bool enable_log_page = false;
+	static bool _disable_log_page;
+	bool enable_import_page = true;
+	static bool _disable_import_page;
+	bool enable_exit_page = true;
+	static bool _disable_exit_page;
+	bool enable_exit_page_hard = false;
+	static bool _disable_exit_page_hard;
+
 	String shadowSocksPath = "${INSTALLED}/ss";
 	String shadowSocksPathRust = "${INSTALLED}/ss-rust";
 	_RunParams::ShadowSocksType shadowSocksType = _RunParams::ShadowSocksType::GO;
@@ -351,7 +364,6 @@ struct ShadowSocksSettings{
 
 	String __checker_server_name = "";
 	String __checker_task_name = "";
-
 
 
 	bool CheckTask(_Task * t);

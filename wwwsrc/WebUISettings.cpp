@@ -101,6 +101,71 @@ Request WebUI::processGetEditSettings(Request req) {
 																				"Disable"
 																		  }));
 		}
+		if (params == "enable_log_page") {
+			var = "Web enable log page";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"true",
+																				set.enable_log_page ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Enable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"false",
+																				(!set.enable_log_page) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+		}
+		if (params == "enable_import_page") {
+			var = "Web enable import page";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"true",
+																				set.enable_import_page ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Enable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"false",
+																				(!set.enable_import_page) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+		}
+		if (params == "enable_export_page") {
+			var = "Web enable export page";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"true",
+																				set.enable_export_page ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Enable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"false",
+																				(!set.enable_export_page) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+		}
+		if (params == "enable_utils_page") {
+			var = "Web enable utils page";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"true",
+																				set.enable_utils_page ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Enable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"false",
+																				(!set.enable_utils_page) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+		}
+		if (params == "enable_exit_page") {
+			var = "Web enable exit page";
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"true",
+																				set.enable_exit_page ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Enable"
+																		  }));
+			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
+																				"false",
+																				(!set.enable_exit_page) ? findText("settings/edit_enum_value_checked.txt") : findText("settings/edit_enum_value_unchecked.txt"),
+																				"Disable"
+																		  }));
+		}
 		if (params == "defaultShadowSocks") {
 			var = "Default ShadowSocks";
 			gen <<  findFillText("settings/edit_enum_value.txt", List<String>({
@@ -319,6 +384,26 @@ Request WebUI::processPostEditSettings(Request req) {
 		auto & set = ShadowSocksController::Get().getConfig();
 		set.autoDetectTunInterface = value == "true" ? true : false;
 	}
+	if (params == "enable_utils_page") {
+		auto & set = ShadowSocksController::Get().getConfig();
+		set.enable_utils_page = value == "true" ? true : false;
+	}
+	if (params == "enable_export_page") {
+		auto & set = ShadowSocksController::Get().getConfig();
+		set.enable_export_page = value == "true" ? true : false;
+	}
+	if (params == "enable_log_page") {
+		auto & set = ShadowSocksController::Get().getConfig();
+		set.enable_log_page = value == "true" ? true : false;
+	}
+	if (params == "enable_import_page") {
+		auto & set = ShadowSocksController::Get().getConfig();
+		set.enable_import_page = value == "true" ? true : false;
+	}
+	if (params == "enable_exit_page") {
+		auto & set = ShadowSocksController::Get().getConfig();
+		set.enable_exit_page = value == "true" ? true : false;
+	}
 	if (params == "hideDNS2Socks") {
 		auto & set = ShadowSocksController::Get().getConfig();
 		set.hideDNS2Socks = value == "true" ? true : false;
@@ -360,6 +445,31 @@ Request WebUI::processGetSettings(Request) {
 															"Web session timeout (m)",
 															toString(c.web_session_timeout_m),
 															"web_session_timeout_m"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Web enable log page",
+															toString(c.enable_log_page),
+															"enable_log_page"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Web enable import page",
+															toString(c.enable_import_page),
+															"enable_import_page"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Web enable export page",
+															toString(c.enable_export_page),
+															"enable_export_page"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Web enable utils page",
+															toString(c.enable_utils_page),
+															"enable_utils_page"
+													  }));
+	out << findFillText("settings/settings_item.txt", List<String>({
+															"Web enable exit page",
+															toString(c.enable_exit_page),
+															"enable_exit_page"
 													  }));
 	out << findFillText("settings/settings_item.txt", List<String>({
 															"ShadowSocks path",

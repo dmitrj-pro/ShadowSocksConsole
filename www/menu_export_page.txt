@@ -1,0 +1,6 @@
+						<li class="nav-item">
+							<a href="/export.html">
+								<i class="la la la-arrow-right"></i>
+								<p>Export</p>
+							</a>
+						</li>

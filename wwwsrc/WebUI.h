@@ -34,11 +34,22 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 			r->headers["Location"] = path;
 			return r;
 		}
+		inline String makeMenu() const {
+			auto & conf = ShadowSocksController::Get().getConfig();
+
+			return findFillText("menu.txt", List<String>({
+															 (!ShadowSocksSettings::_disable_export_page && conf.enable_export_page ) ? findText("menu_export_page.txt") : "",
+															 (!ShadowSocksSettings::_disable_import_page && conf.enable_import_page ) ? findText("menu_import_page.txt") : "",
+															 (!ShadowSocksSettings::_disable_utils_page && conf.enable_utils_page ) ? findText("menu_utils_page.txt") : "",
+															 (!ShadowSocksSettings::_disable_log_page && conf.enable_log_page ) ? findText("menu_log_page.txt") : "",
+															 (!ShadowSocksSettings::_disable_exit_page && conf.enable_exit_page ) ? findText("menu_exit_page.txt") : ""
+														 }));
+		}
 		inline String makePage(const String & page_header, const String & page_name, const String & parametrs) const {
-			return findFillText("template.txt", List<String>({page_header, SS_FULL_VERSION, findText("menu.txt"), page_name, parametrs}));
+			return findFillText("template.txt", List<String>({page_header, SS_FULL_VERSION, makeMenu(), page_name, parametrs}));
 		}
 		inline String makePage(const String & page_header, const String & page_name, const String & page_path, const List<String> & parametrs) const {
-			return findFillText("template.txt", List<String>({page_header, SS_FULL_VERSION, findText("menu.txt"), page_name, findFillText(page_path, parametrs)}));
+			return findFillText("template.txt", List<String>({page_header, SS_FULL_VERSION, makeMenu(), page_name, findFillText(page_path, parametrs)}));
 		}
 		inline String makePage(const String & page_name, const String & page_path, const List<String> & parametrs) const {
 			return makePage(page_name, page_name, page_path, parametrs);
@@ -67,6 +78,7 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 		Request processGetNews(Request req);
 		Request processCheckNews(Request req);
 
+		Request processGetStartRND(Request req);
 		Request processGetTasks(Request req);
 		Request processPostTaskStart(Request req);
 		Request processGetTaskStartPage(Request req);

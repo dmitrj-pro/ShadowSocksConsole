@@ -220,7 +220,7 @@ Request WebUI::processPostServerEditPage(Request req) {
 
 	_Server * sr = _sr->Copy([](const String & txt) { return txt; });
 	readParametr(sr->name, "name", sr);
-	readParametr(sr->group, "group", sr);
+	readParametr_n(sr->group, "group");
 	readParametr(sr->host, "host", sr);
 	readParametr(sr->port, "port", sr);
 
@@ -292,7 +292,7 @@ Request WebUI::processPostNewServerPage(Request req) {
 	_Server * sr = new _Server();
 
 	readParametr(sr->name, "name", sr);
-	readParametr(sr->group, "group", sr);
+	readParametr_n(sr->group, "group");
 	readParametr(sr->host, "host", sr);
 	readParametr(sr->port, "port", sr);
 

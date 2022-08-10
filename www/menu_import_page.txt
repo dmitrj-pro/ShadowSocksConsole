@@ -1,0 +1,6 @@
+						<li class="nav-item">
+							<a href="/import.html">
+								<i class="la la la la-arrow-left"></i>
+								<p>Import</p>
+							</a>
+						</li>
