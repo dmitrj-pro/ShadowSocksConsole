@@ -8,10 +8,11 @@
 #include <_Driver/Files.h>
 #include <_Driver/Service.h>
 #include "VERSION.h"
-#include <Addon/libproxy/Connectors/ConnectorSocks.h>
-#include <Addon/libproxy/Connectors/ConnectorDirect.h>
-#include <Addon/libproxy/Chain.h>
 #include <Addon/sha1.hpp>
+#include <_Driver/Files.h>
+#include <Network/proxy/Chain.h>
+#include <Network/proxy/ConnectorDirect.h>
+#include <Network/proxy/ConnectorSocks.h>
 
 using __DP_LIB_NAMESPACE__::Path;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -26,14 +27,14 @@ void _ShadowSocksController::Stop() {
 		} catch(...) { }
 	clients.clear();
 	clients_lock.unlock();
-    DP_LOG_INFO << "All clients stoped";
+	DP_LOG_INFO << "All clients stoped";
 
 	if (checkerThread != nullptr) {
-        DP_LOG_INFO << "Checker will be stop";
+		DP_LOG_INFO << "Checker will be stop";
 		checkerThread->join();
 		delete checkerThread;
 		checkerThread = nullptr;
-        DP_LOG_INFO << "Checker stoped";
+		DP_LOG_INFO << "Checker stoped";
 	}
 }
 
@@ -60,7 +61,7 @@ String _ShadowSocksController::GetConfigPath() {
 }
 
 String _ShadowSocksController::GetCashePath() {
-	Path p = Path{getWritebleDirectory()};
+	Path p = Path{getCacheDirectory()};
 	p.Append("cashe.conf");
 	return p.Get();
 }
@@ -109,7 +110,7 @@ bool _ShadowSocksController::isCreated(){
 }
 
 void _ShadowSocksController::SaveBootConfig() {
-	Path p = Path{getWritebleDirectory()};
+	Path p = Path{getCacheDirectory()};
 	p.Append("boot.conf");
 
 	if (settings.autostart != AutoStartMode::OnCoreStart)  {
@@ -189,7 +190,7 @@ void _ShadowSocksController::SaveBootConfig() {
 
 void _ShadowSocksController::StartOnBoot() {
 	{
-		Path p = Path{getWritebleDirectory()};
+		Path p = Path{getCacheDirectory()};
 		p.Append("boot.conf");
 		if (!p.IsFile())
 			return;
@@ -314,23 +315,23 @@ void _ShadowSocksController::StopByName(const String & name){
 	DP_LOG_DEBUG << "Try stop task " << name;
 	clients_lock.lock();
 	for (auto it = clients.begin(); it != clients.end(); it++) {
-        if (it->second->getTask() == nullptr) {
-            DP_LOG_DEBUG << "Found crashed task. Close it";
-            clients.erase(it);
-            clients_lock.unlock();
-            StopByName(name);
-            return;
-        }
+		if (it->second->getTask() == nullptr) {
+			DP_LOG_DEBUG << "Found crashed task. Close it";
+			clients.erase(it);
+			clients_lock.unlock();
+			StopByName(name);
+			return;
+		}
 		if (it->second->getTask()->name == name) {
 			if (it->second->GetStatus() == ShadowSocksClientStatus::DoStop || it->second->GetStatus() == ShadowSocksClientStatus::Stoped) {
-                DP_LOG_DEBUG << "Task " << name << " will be stop automatical";
-                bool need_delete = it->second->GetStatus() == ShadowSocksClientStatus::Stoped;
-                ShadowSocksClient * client = it->second;
-                clients.erase(it);
-                clients_lock.unlock();
-                if (need_delete)
-                    delete client;
-                return;
+				DP_LOG_DEBUG << "Task " << name << " will be stop automatical";
+				bool need_delete = it->second->GetStatus() == ShadowSocksClientStatus::Stoped;
+				ShadowSocksClient * client = it->second;
+				clients.erase(it);
+				clients_lock.unlock();
+				if (need_delete)
+					delete client;
+				return;
 			}
 			DP_LOG_DEBUG << "Stop process for " << name;
 			ShadowSocksClient * client = it->second;
@@ -351,23 +352,23 @@ void _ShadowSocksController::StopByClient(ShadowSocksClient * client) {
 	DP_LOG_DEBUG << "Try stop task" << client->getTask()->name;
 	clients_lock.lock();
 	for (auto it = clients.begin(); it != clients.end(); it++) {
-        if (it->second->getTask() == nullptr) {
-            DP_LOG_DEBUG << "Found crashed task. Close it";
-            clients.erase(it);
-            clients_lock.unlock();
-            StopByClient(client);
-            return;
-        }
+		if (it->second->getTask() == nullptr) {
+			DP_LOG_DEBUG << "Found crashed task. Close it";
+			clients.erase(it);
+			clients_lock.unlock();
+			StopByClient(client);
+			return;
+		}
 		if (it->second == client) {
 			if (it->second->GetStatus() == ShadowSocksClientStatus::DoStop || it->second->GetStatus() == ShadowSocksClientStatus::Stoped) {
-                DP_LOG_DEBUG << "Task " << client->getTask()->name << " will be stop automatical";
-                bool need_delete = it->second->GetStatus() == ShadowSocksClientStatus::Stoped;
-                ShadowSocksClient * cl = it->second;
-                clients.erase(it);
-                clients_lock.unlock();
-                if (need_delete)
-                    delete cl;
-                return;
+				DP_LOG_DEBUG << "Task " << client->getTask()->name << " will be stop automatical";
+				bool need_delete = it->second->GetStatus() == ShadowSocksClientStatus::Stoped;
+				ShadowSocksClient * cl = it->second;
+				clients.erase(it);
+				clients_lock.unlock();
+				if (need_delete)
+					delete cl;
+				return;
 			}
 			DP_LOG_DEBUG << "Stop process for " << client->getTask()->name;
 			clients.erase(it);
@@ -381,7 +382,7 @@ void _ShadowSocksController::StopByClient(ShadowSocksClient * client) {
 }
 
 void _ShadowSocksController::OpenLogFile() {
-	__DP_LIB_NAMESPACE__::Path logF {getWritebleDirectory()};
+	__DP_LIB_NAMESPACE__::Path logF {getCacheDirectory()};
 	logF.Append("LOGGING.txt");
 	__DP_LIB_NAMESPACE__::global_config.addLogFile(logF);
 	__DP_LIB_NAMESPACE__::global_config.log.SetUserLogLevel(__DP_LIB_NAMESPACE__::LogLevel::Trace);
@@ -389,7 +390,7 @@ void _ShadowSocksController::OpenLogFile() {
 }
 
 void _ShadowSocksController::CloseLogFile() {
-	__DP_LIB_NAMESPACE__::Path logF {getWritebleDirectory()};
+	__DP_LIB_NAMESPACE__::Path logF {getCacheDirectory()};
 	logF.Append("LOGGING.txt");
 	__DP_LIB_NAMESPACE__::global_config.closeLogFile(logF);
 	__DP_LIB_NAMESPACE__::RemoveFile(logF.Get());
@@ -631,7 +632,6 @@ _ShadowSocksController::CheckLoopStruct _ShadowSocksController::makeCheckStruct(
 	args.save_last_check = true;
 	args.auto_check_mode = settings.auto_check_mode;
 	args.defaultHost = this->settings.findRunParamsbyName("DEFAULT").localHost;
-	args.tempPath = settings.replacePath(settings.tempPath, true);
 	args.wgetPath = settings.getWGetPath();
 	args.downloadUrl = settings.auto_check_download_url;
 	args.checkIpUrl = settings.auto_check_ip_url;
@@ -684,7 +684,7 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 	DP_LOG_DEBUG << "Start Http port on " << http_port << " Socks5 port " << socks5_port;
 
 	auto downloadFile = [args] (_Server * srv, Downloader & dwn) {
-		Path p (args.tempPath);
+		Path p (getCacheDirectory());
 		p.Append("speed.zip");
 		auto t1 = std::chrono::high_resolution_clock::now();
 		try{
@@ -716,7 +716,8 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 
 	SSClientFlags flags;
 	flags.port = socks5_port;
-	if (args.auto_check_mode == AutoCheckingMode::Work)
+
+	if (args.auto_check_mode == AutoCheckingMode::Work && settings.findRunParamsbyName(task->runParamsName).httpProxy <= 0)
 		flags.http_port = 0;
 	else
 		flags.http_port = http_port;
@@ -748,8 +749,8 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 		return;
 	}
 	if (args.auto_check_mode == AutoCheckingMode::Work) {
-		Node * proxy1 = new Node(new ConnectorDirect());
-		Node * proxy = new Node(new ConnectorSocks(flags.listen_host, flags.port), proxy1);
+		__DP_LIB_NAMESPACE__::ProxyNode * proxy = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorDirect());
+		proxy = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorSocks(flags.listen_host, flags.port), proxy);
 		__DP_LIB_NAMESPACE__::URLElement url = __DP_LIB_NAMESPACE__::URLElement::parse(args.checkIpUrl);
 		if (url.port == 0) {
 			if (url.type == __DP_LIB_NAMESPACE__::URLElement::Type::Http)
@@ -760,9 +761,8 @@ void _ShadowSocksController::check_server(_Server * srv, const _Task * task,
 
 
 		//TCPClient * cl = proxy->makeConnect(this->getConfig().replaceVariables(srv->host), __DP_LIB_NAMESPACE__::parse<unsigned short>(this->getConfig().replaceVariables(srv->port)));
-		TCPClient * cl = proxy->makeConnect(url.host, url.port);
+		__DP_LIB_NAMESPACE__::TCPClient * cl = proxy->makeConnect(url.host, url.port);
 		//TCPClient * cl = proxy->makeConnect("8.8.8.8", 53);
-		delete proxy1;
 		delete proxy;
 		if (cl == nullptr) {
 			srv->check_result.isRun = false;
@@ -906,6 +906,65 @@ void _ShadowSocksController::check_loop(const CheckLoopStruct & args) {
 		}
 		__DP_LIB_NAMESPACE__::ServiceSinglton::Get().LoopWait(args.auto_check_interval_s * 1000);
 	}
+}
+
+void _ShadowSocksController::startRecord() {
+	record_started = true;
+	if (!__DP_LIB_NAMESPACE__::CP(GetConfigPath(), GetConfigPath()+".record")) {
+		record_started = false;
+		makeNotifyTask("", "Fail to start record");
+	}
+}
+
+void _ShadowSocksController::stopRecord() {
+	if (!record_started)
+		return;
+	Path p{GetConfigPath()+".record"};
+	if (!p.IsFile()) {
+		record_started = false;
+		makeNotifyTask("", "Fail to start record");
+		return;
+	}
+
+	ShadowSocksSettings tmp;
+	tmp.Load(GetSourceConfig(p.Get(), password));
+	String res = settings.GetDiffConfig(tmp);
+
+	if (password.size() > 1) {
+		__DP_LIB_NAMESPACE__::Crypt crypt = __DP_LIB_NAMESPACE__::Crypt(password, "SCH5");
+		res = crypt.Enc(res);
+	}
+	__DP_LIB_NAMESPACE__::Ofstream out;
+	__DP_LIB_NAMESPACE__::Path p2 {GetConfigPath()+".patch"};
+	out.open(p2.Get());
+	if (out.fail()) {
+		makeNotifyTask("", "Fail to open config patch file to save");
+		return;
+	}
+	out << res;
+	out.flush();
+	out.close();
+	if (out.fail()) {
+		makeNotifyTask("", "Fail to save config patch file");
+		return;
+	}
+
+	__DP_LIB_NAMESPACE__::RemoveFile(p.Get());
+	record_started = false;
+}
+
+void _ShadowSocksController::applyRecord() {
+	__DP_LIB_NAMESPACE__::Path p2 {GetConfigPath()+".patch"};
+	if (!p2.IsFile())
+		return;
+	String patch = GetSourceConfig(p2.Get(), password);
+	settings.ApplyPatch(patch);
+	SaveConfig();
+}
+
+bool _ShadowSocksController::haveRecord() {
+	__DP_LIB_NAMESPACE__::Path p {GetConfigPath()+".patch"};
+	return p.IsFile();
 }
 
 DP_SINGLTONE_CLASS_CPP(_ShadowSocksController, ShadowSocksController)

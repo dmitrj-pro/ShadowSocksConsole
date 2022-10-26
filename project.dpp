@@ -17,9 +17,9 @@ THROW=Dmitrj PRO Lib is not set, or it is old version or addons is not compiled.
 CXXFLAGS=-std=c++11
 
 INCLUDE = DP_LIB
-LIBS = DP_LIB_LIB
-LIBS = DP_LIB_NETWORK_LIB
 LIBS = DP_LIB_ADDONS_LIB
+LIBS = DP_LIB_NETWORK_LIB
+LIBS = DP_LIB_LIB
 
 [WINDOWS]
 CXXFLAGS=-DDP_WIN

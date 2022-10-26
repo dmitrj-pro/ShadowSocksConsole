@@ -7,6 +7,7 @@
 #include <_Driver/ServiceMain.h>
 #include <Network/TCPClient.h>
 #include <Network/Utils.h>
+#include <Types/Random.h>
 
 using __DP_LIB_NAMESPACE__::OStrStream;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -63,6 +64,9 @@ Request WebUI::processPostTaskStartPage(Request req) {
 			flags.port = 0;
 		else
 			flags.port = _port;
+
+
+		readParametr_n(flags.listen_host, "local_host");
 
 		_port = 0;
 		readParametr_nt(_port, "local_http_port", int);
@@ -162,8 +166,9 @@ Request WebUI::processGetStartRND(Request req) {
 
 	auto & ctrl = ShadowSocksController::Get();
 
+	__DP_LIB_NAMESPACE__::Random rnd;
 	for (unsigned int i = 0 ; i < task_for_start.size(); i ++) {
-		_Task * t = task_for_start[rand() % task_for_start.size()];
+		_Task * t = task_for_start[rnd.RandInt(task_for_start.size())];
 		DP_LOG_DEBUG << "WebUI (" << user_id << "): Start random task by group " << filter_group << " and name " << filter_name << ": " << t->name;
 		try{
 			auto funcCrash = [this, user_id] (const String & name, const ExitStatus & status) {
@@ -345,7 +350,6 @@ Request WebUI::processPostTaskEdit(Request req) {
 		resp->body = new char[html.size() + 1];
 		strncpy(resp->body, html.c_str(), html.size());
 		resp->body_length = html.size();
-		delete tk;
 		return resp;
 	}
 	ctrl.getConfig().tasks.push_back(tk);
@@ -408,6 +412,15 @@ Request WebUI::processGetTaskEditPage(Request req) {
 															_t->name,
 															_t->group,
 															group_gen.str(),
+															 _t->method == "Direct" ?
+																 findText("tasks/tasks_edit_checket_true.txt") :
+																 findText("tasks/tasks_edit_checket_false.txt"),
+															 _t->method == "Socks5" ?
+																 findText("tasks/tasks_edit_checket_true.txt") :
+																 findText("tasks/tasks_edit_checket_false.txt"),
+															 _t->method == "Http" ?
+																 findText("tasks/tasks_edit_checket_true.txt") :
+																 findText("tasks/tasks_edit_checket_false.txt"),
 															_t->method == "AEAD_CHACHA20_POLY1305" ?
 																findText("tasks/tasks_edit_checket_true.txt") :
 																findText("tasks/tasks_edit_checket_false.txt"),
@@ -708,6 +721,7 @@ Request WebUI::processGetTaskStartPage(Request req) {
 															 run_params.shadowsocks_type == _RunParams::ShadowSocksType::Rust ?
 																 findText("tasks/tasks_edit_checket_true.txt") :
 																 findText("tasks/tasks_edit_checket_false.txt"),
+															run_params.localHost,
 															toString(run_params.localPort),
 															toString(run_params.httpProxy),
 															vpn_gen.str(),
@@ -733,7 +747,7 @@ Request WebUI::processGetTasks(Request req) {
 	if (ConteinsKey(req->get, "name"))
 		filter_name = req->get["name"];
 	if (ConteinsKey(req->cookie, "t_group") && filter_group.size() == 0 && !ConteinsKey(req->get, "group"))
-        return makeRedirect(req, "/tasks.html?group=" + req->cookie["t_group"] + (filter_name.size() == 0 ? "" : "&name=" + filter_name));
+		return makeRedirect(req, "/tasks.html?group=" + req->cookie["t_group"] + (filter_name.size() == 0 ? "" : "&name=" + filter_name));
 	if (filter_group.size() == 0 && ConteinsKey(req->get, "group"))
 		force_cookie = true;
 	SmartParser filter_name_parser{"*" + filter_name + "*"};
@@ -897,7 +911,7 @@ Request WebUI::processGetTasks(Request req) {
 	String html = makePage("Tasks", "tasks/tasks_index.txt", List<String>( { filter_name, group_gen.str(), out.str()}));
 	Request resp = makeRequest();
 	if (filter_group.size() != 0 || force_cookie)
-        resp->cookie["t_group"] = filter_group;
+		resp->cookie["t_group"] = filter_group;
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
 	resp->body_length = html.size();

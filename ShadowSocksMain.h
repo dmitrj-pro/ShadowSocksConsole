@@ -190,7 +190,7 @@ struct _Task{
 	virtual ~_Task(){};
 
 	bool Check() const {
-		List<String> modes{"AEAD_AES_128_GCM", "AEAD_AES_256_GCM", "AEAD_CHACHA20_POLY1305"};
+		List<String> modes{"Direct", "Socks5", "Http", "AEAD_AES_128_GCM", "AEAD_AES_256_GCM", "AEAD_CHACHA20_POLY1305"};
 		int i = 0;
 		for (String m: modes)
 			if (m == method)
@@ -235,7 +235,6 @@ struct Tun2SocksConfig{
 	String preStopCommand = "";
 	String name = "";
 	bool isDNS2Socks = true;
-	bool hideDNS2Socks = true;
 	bool isNull = true;
 };
 
@@ -342,16 +341,13 @@ struct ShadowSocksSettings{
 	_RunParams::ShadowSocksType shadowSocksType = _RunParams::ShadowSocksType::GO;
 	String v2rayPluginPath = "${INSTALLED}/v2ray";
 	String tun2socksPath = "${INSTALLED}/tun2socks";
-	String dns2socksPath = "${INSTALLED}/dns2socks";
 	String wgetPath = "${INSTALLED}/wget";
-	String tempPath = "${INSTALLED}";
 	bool fixLinuxWgetPath = true;
 
 	ServerCheckingMode checkServerMode = ServerCheckingMode::TCPCheck;
 	bool autoDetectTunInterface = false;
 	static bool enablePreStartStopScripts;
 	bool enableLogging = false;
-	bool hideDNS2Socks = true;
 	Map<String, String> variables;
 	UInt udpTimeout = 600;
 
@@ -389,9 +385,11 @@ struct ShadowSocksSettings{
 	String getWGetPath() const;
 
 	String GetSource();
+	String GetDiffConfig(const ShadowSocksSettings & s);
 	String GetSourceCashe();
 	void LoadCashe(const String & text);
 	void Load(const String & text);
+	void ApplyPatch(const String & text);
 
 	ShadowSocksClient * makeServer(int id, const SSClientFlags & flags);
 };
@@ -400,3 +398,5 @@ struct ShadowSocksSettings{
 String getWritebleDirectory();
 
 String getExecutableDirectory();
+
+String getCacheDirectory();

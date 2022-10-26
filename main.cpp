@@ -17,6 +17,7 @@
 #include "wwwsrc/WebUI.h"
 #include "TCPChecker.h"
 #include <Types/SmartPtr.h>
+#include <Parser/SmartParser.h>
 #include <_Driver/ThreadWorker.h>
 #include <Addon/sha1.hpp>
 #include <unistd.h>
@@ -77,6 +78,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 
 		String witable_directory = "";
 		String executable_directory = "";
+		String cache_directory = "";
 
 
 	public:
@@ -84,6 +86,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 
 		inline String getWritableDir() const { return witable_directory; }
 		inline String getExecutableDir() const { return executable_directory; }
+		inline String getCacheDir() const { return cache_directory; }
 
 		void serviceMain() {
 			DP_LOG_INFO << "Start " << getVersion() << " as service";
@@ -220,8 +223,8 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 		}
 		inline String getVersion() {
 			__DP_LIB_NAMESPACE__::OStrStream out;
-			out << "ShadowSocks Console v" << SS_HEAD_VERSION << "-" << SS_VERSION << " (" << SS_VERSION_HASHE << ")\n";
-			out << "Base on DPLib V" << __DP_LIB_NAMESPACE__::VERSION() << "\n";
+			out << "ShadowSocksConsole v" << SS_HEAD_VERSION << "-" << SS_VERSION << " (" << SS_VERSION_HASHE << "). ";
+			out << "Base on DPLib V" << __DP_LIB_NAMESPACE__::VERSION();
 			return out.str();
 		}
 		inline void version() {
@@ -237,6 +240,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 		inline void setWriteDirectory(const String & path) {
 			DP_LOG_ERROR << "Set main directory " << path;
 			this->witable_directory = path;
+			this->cache_directory = this->witable_directory;
 			readHostData();
 
 			Path p { path};
@@ -256,6 +260,10 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			DP_LOG_ERROR << "Set executable directory " << path;
 			this->executable_directory = path;
 		}
+		inline void setCacheDirectory(const String & path) {
+			DP_LOG_ERROR << "Set executable directory " << path;
+			this->cache_directory = path;
+		}
 
 		inline void onError() {
 			this->SetNeedToExit(true);
@@ -268,6 +276,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 				Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
 				p = Path(p.GetFolder());
 				this->witable_directory = p.Get();
+				this->cache_directory = this->witable_directory;
 
 				#ifdef DP_WIN
 					if (Is64bitWindows())
@@ -296,6 +305,7 @@ class ShadowSocksMain: public __DP_LIB_NAMESPACE__::ServiceMain {
 			DP_SM_addArgumentHelp0(&ShadowSocksMain::enableLogging, "Enable logging", "log");
 			DP_SM_addArgumentHelp1(String, &ShadowSocksMain::setWriteDirectory, &ShadowSocksMain::onError, "Set main directory with config", "--set-main-dir");
 			DP_SM_addArgumentHelp1(String, &ShadowSocksMain::setExecuteDirectory, &ShadowSocksMain::onError, "Set directory with binary files", "--set-depend-dir");
+			DP_SM_addArgumentHelp1(String, &ShadowSocksMain::setCacheDirectory, &ShadowSocksMain::onError, "Set directory with cache files", "--set-cache-dir");
 
 			AddHelp(std::cout, [this]() { this->SetNeedToExit(true); }, "help", "-help", "--help", "-h", "--h", "?");
 		}
@@ -321,6 +331,15 @@ String getExecutableDirectory() {
 	return m->getExecutableDir();
 }
 
+String getCacheDirectory() {
+	ShadowSocksMain * m = dynamic_cast<ShadowSocksMain*>(__DP_LIB_NAMESPACE__::ServiceSinglton::GetRef());
+	if (m == nullptr) {
+		Path p = Path(__DP_LIB_NAMESPACE__::ServiceSinglton::Get().GetPathToFile());
+		p = Path(p.GetFolder());
+		return p.Get();
+	}
+	return m->getCacheDir();
+}
 
 
 
@@ -369,6 +388,7 @@ void ShadowSocksMain::readHostData() {
 		SmartParser webhost ("web_host${1:null<string>}=${host:trim<string>}:${port:int}");
 		SmartParser cchost ("service_host${1:null<string>}=${host:trim<string>}:${port:int}");
 		SmartParser enable_scripting ("tun_scripts${1:null<string>}=${value:trim<int>}");
+		SmartParser chache_dir_read ("cache_dir${1:null<string>}=${value:trim<string>}");
 
 		SmartParser disable_import_page("disable_import_page${1:null<string>}=${value:trim<int>}");
 		SmartParser disable_export_page("disable_export_page${1:null<string>}=${value:trim<int>}");
@@ -383,6 +403,9 @@ void ShadowSocksMain::readHostData() {
 			if (webhost.Check(line)) {
 				host_web.host = webhost.Get("host");
 				host_web.port = parse<unsigned short>(webhost.Get("port"));
+			}
+			if (chache_dir_read.Check(line)) {
+				this->cache_directory = chache_dir_read.Get("value");
 			}
 			if (cchost.Check(line)) {
 				host_service.host = cchost.Get("host");
@@ -726,8 +749,6 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const SSClientFlags 
 		run_params.localHost = flags.listen_host;
 
 
-	conf.hideDNS2Socks = hideDNS2Socks;
-
 	// Находим все сервера, связанные с таской.
 	List<_Server*> srvs;
 	for (_Server * sr : servers)
@@ -830,10 +851,9 @@ ShadowSocksClient * ShadowSocksSettings::makeServer(int id, const SSClientFlags 
 	res->SetShadowSocksPath(this->replacePath(shadowSockType == _RunParams::ShadowSocksType::GO ? this->shadowSocksPath : this->shadowSocksPathRust));
 	res->SetShadowSocksType(shadowSockType);
 	res->SetV2RayPluginPath(this->replacePath(this->v2rayPluginPath));
-	res->SetTempPath(this->replacePath(this->tempPath, true));
+	res->SetTempPath(this->replacePath(getCacheDirectory(), true));
 	res->SetUDPTimeout(this->udpTimeout);
 	Tun2Socks::SetT2SPath(this->replacePath(this->tun2socksPath));
-	Tun2Socks::SetD2SPath(this->replacePath(this->dns2socksPath));
 
 	return res;
 }
@@ -877,18 +897,12 @@ bool _ShadowSocksController::CheckInstall() {
 	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.tun2socksPath));
 	if (!p.IsFile())
 		return false;
-#ifndef DP_ANDROID
-	DP_LOG_DPDEBUG << "Check D2S\n";
-	p = __DP_LIB_NAMESPACE__::Path(settings.replacePath(settings.dns2socksPath));
-	if (!p.IsFile())
-		return false;
 	#ifdef DP_WIN
 		DP_LOG_DPDEBUG << "Check wget\n";
 		p = __DP_LIB_NAMESPACE__::Path(settings.getWGetPath());
 		if (!p.IsFile())
 			return false;
 	#endif
-#endif
 	return true;
 }
 
@@ -1026,9 +1040,7 @@ String ShadowSocksSettings::GetSource() {
 		Set(key + "ShadowSocksType", SSTtypetoString(this->shadowSocksType));
 		Set(key + "V2RayPath", this->v2rayPluginPath);
 		Set(key + "Tun2Socks", this->tun2socksPath);
-		Set(key + "Dns2Socks", this->dns2socksPath);
 		Set(key + "WGetPath", this->wgetPath);
-		Set(key + "tempPath", this->tempPath);
 		SetType(key + "UDPTimeout", this->udpTimeout);
 		SetType(key + "WebSessionTimeout", this->web_session_timeout_m);
 		SetType(key + "WebEnableLogPage", this->enable_log_page);
@@ -1036,7 +1048,6 @@ String ShadowSocksSettings::GetSource() {
 		SetType(key + "WebEnableUtilsPage", this->enable_utils_page);
 		SetType(key + "WebEnableExportPage", this->enable_export_page);
 		SetType(key + "WebEnableExitPage", this->enable_exit_page);
-		SetType(key + "hideDNS2Socks", this->hideDNS2Socks);
 		SetType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath);
 		SetType(key + "autoDetectTunInterface", this->autoDetectTunInterface);
 		SetType(key + "enableLogging", this->enableLogging);
@@ -1071,6 +1082,457 @@ String ShadowSocksSettings::GetSource() {
 	return _out.str();
 }
 
+String ShadowSocksSettings::GetDiffConfig(const ShadowSocksSettings & s) {
+	__DP_LIB_NAMESPACE__::Setting setting;
+
+#define SetDiff(X, Var1, Var2) \
+	if (Var1 != Var2) \
+		setting.add(X, Var1);
+
+#define SetDiffType(X, Var1, Var2) \
+	if (Var1 != Var2) \
+		setting.add(X, __DP_LIB_NAMESPACE__::toString(Var1));
+
+	//ToDo
+	for (_Server* sr: servers) {
+		_Server * sr2 = nullptr;
+		for (_Server * _s : s.servers)
+			if (_s->id == sr->id) {
+				sr2 = _s;
+				break;
+			}
+
+		bool server_added = false;
+		if (sr2 == nullptr) {
+			sr2 = new _V2RayServer(0);
+			server_added = true;
+		}
+
+
+		String key = "Servers." + toString(sr->id) + ".";
+		SetDiffType(key + "port", sr->port, sr2->port);
+		SetDiff(key + "name", sr->name, sr2->name);
+		SetDiff(key + "group", sr->group, sr2->group);
+		SetDiff(key + "host", sr->host, sr2->host);
+		{
+			_V2RayServer * srv = dynamic_cast<_V2RayServer *>(sr);
+			if (srv != nullptr) {
+				_V2RayServer * srv2 = dynamic_cast<_V2RayServer *>(sr2);
+				if (srv2 == nullptr) {
+					Set(key + "V2Ray", "true");
+					SetType(key + "tls", srv->isTLS);
+					Set(key + "mode", srv->mode);
+					Set(key + "v2host", srv->v2host);
+					Set(key + "v2path", srv->path);
+				} else {
+					SetDiffType(key + "tls", srv->isTLS, srv2->isTLS);
+					SetDiff(key + "mode", srv->mode, srv2->mode);
+					SetDiff(key + "v2host", srv->v2host, srv2->v2host);
+					SetDiff(key + "v2path", srv->path, srv2->path);
+				}
+			}
+		}
+		if (server_added)
+			delete sr2;
+	}
+
+	for (const Tun2SocksConfig & conf : this->tun2socksConf) {
+		Tun2SocksConfig conf2;
+		for (const Tun2SocksConfig & c2 : s.tun2socksConf)
+			if (c2.name == conf.name){
+				conf2 = c2;
+				break;
+			}
+
+		String key = "Tun2Socks." + conf.name + ".";
+		SetDiff(key + "name", conf.name, conf2.name);
+		SetDiff(key + "tunName", conf.tunName, conf2.tunName);
+		SetDiff(key + "defaultRoute", conf.defaultRoute, conf2.defaultRoute);
+		SetDiffType(key + "removeDefaultRoute", conf.removeDefaultRoute, conf2.removeDefaultRoute);
+		SetDiffType(key + "enableDefaultRouting", conf.enableDefaultRouting, conf2.enableDefaultRouting);
+		SetDiffType(key + "isDNS2Socks", conf.isDNS2Socks, conf2.isDNS2Socks);
+		SetDiff(key + "preStopCommand", conf.preStopCommand, conf2.preStopCommand);
+		SetDiff(key + "postStartCommand", conf.postStartCommand, conf2.postStartCommand);
+		String ids = "";
+		for (const String & id : conf.dns)
+			ids = ids + id + ";";
+		String ids2 = "";
+		for (const String & id : conf2.dns)
+			ids2 = ids2 + id + ";";
+		SetDiff(key + "DNS", ids, ids2);
+		ids = "";
+		for (const String & id : conf.ignoreIP)
+			ids = ids + id + ";";
+		ids2 = "";
+		for (const String & id : conf2.ignoreIP)
+			ids2 = ids2 + id + ";";
+		SetDiff(key + "IgnoreIP", ids, ids2);
+	}
+
+	for (_Task * tk : tasks) {
+		_Task * tk2 = nullptr;
+		for (_Task * t : s.tasks)
+			if (t->id == tk->id) {
+				tk2 = t;
+				break;
+			}
+
+		bool task_added = false;
+		if (tk2 == nullptr) {
+			tk2 = new _Task(0);
+			task_added = true;
+		}
+
+		String key = "Tasks." + toString(tk->id) + ".";
+		SetDiff(key + "name", tk->name, tk2->name);
+		SetDiff(key + "group", tk->group, tk2->group);
+		SetDiff(key + "password", tk->password, tk2->password);
+		SetDiff(key + "method", tk->method, tk2->method);
+		SetDiffType(key + "autostart", tk->autostart, tk2->autostart);
+		SetDiff(key + "RunParams", tk->runParamsName, tk2->runParamsName);
+		SetDiffType(key + "EnableIPv6", tk->enable_ipv6, tk2->enable_ipv6);
+		SetDiffType(key + "EnableUDP", tk->enable_udp, tk2->enable_udp);
+		String ids = "";
+		for (int id : tk->servers_id)
+			ids = ids + toString(id) + ";";
+		String ids2 = "";
+		for (int id : tk2->servers_id)
+			ids2 = ids2 + toString(id) + ";";
+		SetDiff(key + "servers", ids, ids2);
+
+		int i = 0;
+		for (_Tun t : tk->tuns) {
+			_Tun t2;
+			for (_Tun _t2 : tk2->tuns)
+				if (_t2.localHost == t.localHost && _t2.localPort == t.localPort && _t2.type == t.type) {
+					t2 = _t2;
+					break;
+				}
+			bool created = t2.remoteHost.size() == 0;
+
+			String kk = key + "tun." + toString(i++) + ".";
+			SetDiff(kk + "remoteHost", t.remoteHost, t2.remoteHost);
+			SetDiffType(kk + "remotePort", t.remotePort, t2.remotePort);
+			SetDiffType(kk + "localPort", t.localPort, t2.localPort);
+			if (t.type != t2.type || created) {
+				if (t.type == TunType::TCP)
+					Set(kk + "proto", "tcp");
+				if (t.type == TunType::UDP)
+					Set(kk + "proto", "udp");
+			}
+		}
+		if (task_added)
+			delete tk2;
+
+	}
+
+	for (const _RunParams & tk : runParams) {
+		_RunParams tk2;
+		for (const _RunParams & _tk : s.runParams)
+			if (_tk.name == tk.name) {
+				tk2 = _tk;
+				break;
+			}
+
+		String key = "RunParams." + toString(tk.name) + ".";
+		SetDiff(key + "name", tk.name, tk2.name);
+		SetDiffType(key + "localport", tk.localPort, tk2.localPort);
+		SetDiff(key + "localhost", tk.localHost, tk2.localHost);
+		SetDiff(key + "VPN", tk.tun2SocksName, tk2.tun2SocksName);
+		SetDiff(key + "defaultShadowSocks", SSTtypetoString(tk.shadowsocks_type), SSTtypetoString(tk2.shadowsocks_type));
+		SetDiffType(key + "httpport", tk.httpProxy, tk2.httpProxy);
+		SetDiffType(key + "SystemProxy", tk.systemProxy, tk2.systemProxy);
+		SetDiffType(key + "multimode", tk.multimode, tk2.multimode);
+	}
+
+	{
+		String key = "System.Settings.";
+		SetDiff(key + "autostart", AutoStartMode_to_str(this->autostart), AutoStartMode_to_str(s.autostart));
+		SetDiffType(key + "countRestartAutostarted", this->countRestartAutostarted, s.countRestartAutostarted);
+		SetDiff(key + "ShadowSocksPath", this->shadowSocksPath, s.shadowSocksPath);
+		SetDiff(key + "ShadowSocksPathRust", this->shadowSocksPathRust, s.shadowSocksPathRust);
+		SetDiff(key + "ShadowSocksType", SSTtypetoString(this->shadowSocksType), SSTtypetoString(s.shadowSocksType));
+		SetDiff(key + "V2RayPath", this->v2rayPluginPath, s.v2rayPluginPath);
+		SetDiff(key + "Tun2Socks", this->tun2socksPath, s.tun2socksPath);
+		SetDiff(key + "WGetPath", this->wgetPath, s.wgetPath);
+		SetDiffType(key + "UDPTimeout", this->udpTimeout, s.udpTimeout);
+		SetDiffType(key + "WebSessionTimeout", this->web_session_timeout_m, s.web_session_timeout_m);
+		SetDiffType(key + "WebEnableLogPage", this->enable_log_page, s.enable_log_page);
+		SetDiffType(key + "WebEnableImportPage", this->enable_import_page, s.enable_import_page);
+		SetDiffType(key + "WebEnableUtilsPage", this->enable_utils_page, s.enable_utils_page);
+		SetDiffType(key + "WebEnableExportPage", this->enable_export_page, s.enable_export_page);
+		SetDiffType(key + "WebEnableExitPage", this->enable_exit_page, s.enable_exit_page);
+		SetDiffType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath, s.fixLinuxWgetPath);
+		SetDiffType(key + "autoDetectTunInterface", this->autoDetectTunInterface, s.autoDetectTunInterface);
+		SetDiffType(key + "enableLogging", this->enableLogging, s.enableLogging);
+		SetDiff(key + "BootstrapDNS", this->bootstrapDNS, s.bootstrapDNS);
+		String tmp = AutoCheckingMode_to_str(this->auto_check_mode);
+		SetDiff(key + "AutoCheckingMode", tmp, AutoCheckingMode_to_str(s.auto_check_mode));
+		tmp = ServerCheckingMode_to_str(checkServerMode);
+		SetDiff(key + "checkServerMode", tmp, ServerCheckingMode_to_str(s.checkServerMode));
+		SetDiffType(key + "AutoCheckingIntervalS", this->auto_check_interval_s, s.auto_check_interval_s);
+		SetDiff(key + "AutoCheckingIpUrl", this->auto_check_ip_url, s.auto_check_ip_url);
+		SetDiff(key + "AutoCheckingDownloadUrl", this->auto_check_download_url, s.auto_check_download_url);
+	}
+
+	{
+		String key = "System.Variables.";
+		for (const auto & it : this->variables) {
+			String v2 = "";
+			for (const auto & it2 : s.variables)
+				if (it2.first == it.first) {
+					v2 = it2.second;
+				}
+
+			SetDiff(key + it.first, it.second, v2);
+		}
+	}
+
+	__DP_LIB_NAMESPACE__::OStrStream _out;
+	_out << setting;
+	return _out.str();
+}
+
+void ShadowSocksSettings::ApplyPatch(const String & text) {
+	__DP_LIB_NAMESPACE__::IStrStream in;
+	in.str(text);
+
+	__DP_LIB_NAMESPACE__::Setting setting;
+	in * setting;
+
+	//ToDO
+	auto serversList = setting.getFolders<List<String>>("Servers");
+	for (String id : serversList) {
+		_Server * sr = findServerById(parse<int>(id));
+		bool server_created = false;
+		if (sr == nullptr) {
+			sr = new _Server(__DP_LIB_NAMESPACE__::parse<int>(id));
+			server_created = true;
+		}
+
+		String key = "Servers." + id + ".";
+
+		if (setting.Conteins(key + "V2Ray")) {
+			_V2RayServer * srv = dynamic_cast<_V2RayServer*>(sr);
+			if (srv == nullptr) {
+				srv = new _V2RayServer(sr);
+				if (server_created)
+					delete sr;
+				sr = srv;
+				server_created = true;
+				deleteServerById(__DP_LIB_NAMESPACE__::parse<int>(id));
+			}
+			ReadNType(key + "tls", srv->isTLS, bool);
+			ReadN(key + "mode", srv->mode);
+			ReadN(key + "v2path", srv->path);
+			ReadN(key + "v2host", srv->v2host);
+		}
+
+		if (sr->id >= _Server::glob_id)
+			_Server::glob_id = sr->id + 1;
+		ReadN(key + "port", sr->port);
+		ReadN(key + "host", sr->host);
+		ReadN(key + "name", sr->name);
+		ReadN(key + "group", sr->group);
+		if (server_created)
+			servers.push_back(sr);
+	}
+
+	auto tun2SocksList = setting.getFolders<List<String>>("Tun2Socks");
+	for (String id : tun2SocksList) {
+		String key = "Tun2Socks." + id + ".";
+		String __name = id;
+		ReadN(key + "name", __name);
+		Tun2SocksConfig conf = findVPNbyName(__name);
+		bool created = !conf.isNull;
+		ReadN(key + "name", conf.name);
+		ReadN(key + "tunName", conf.tunName);
+		ReadN(key + "defaultRoute", conf.defaultRoute);
+		ReadNType(key + "removeDefaultRoute", conf.removeDefaultRoute, bool);
+		ReadNType(key + "isDNS2Socks", conf.isDNS2Socks, bool);
+		ReadNType(key + "enableDefaultRouting", conf.enableDefaultRouting, bool);
+		ReadN(key + "preStopCommand", conf.preStopCommand);
+		ReadN(key + "postStartCommand", conf.postStartCommand);
+
+		String ids = "";
+		ReadN(key + "DNS", ids);
+		if (ids.size() > 2) {
+			conf.dns.clear();
+			auto ll = __DP_LIB_NAMESPACE__::split(ids, ';');
+			for (String id: ll) {
+				if (id.size() > 0)
+					conf.dns.push_back(id);
+			}
+		}
+		ids = "";
+		ReadN(key + "IgnoreIP", ids);
+		if (ids.size() > 2) {
+			conf.ignoreIP.clear();
+			auto ll = __DP_LIB_NAMESPACE__::split(ids, ';');
+			for (String id: ll) {
+				if (id.size() > 0)
+					conf.ignoreIP.push_back(id);
+			}
+		}
+		conf.isNull = false;
+		if (!findVPNbyName(conf.name).isNull)
+			deleteVPNByName(conf.name);
+
+		this->tun2socksConf.push_back(conf);
+	}
+
+	auto taskList = setting.getFolders<List<String>>("Tasks");
+	for (String id : taskList) {
+		String key = "Tasks." + id + ".";
+
+		_Task * tk = findTaskById(__DP_LIB_NAMESPACE__::parse<int>(id));
+		bool created = false;
+		if (tk == nullptr) {
+			tk = new _Task(__DP_LIB_NAMESPACE__::parse<int>(id));
+			created = true;
+		}
+
+		if (tk->id >= _Task::glob_id)
+			_Task::glob_id = tk->id + 1;
+		ReadN(key + "name", tk->name);
+		ReadN(key + "group", tk->group);
+		ReadN(key + "password", tk->password);
+		ReadN(key + "method", tk->method);
+		ReadNType(key + "autostart", tk->autostart, bool);
+		ReadNType(key + "EnableUDP", tk->enable_udp, bool);
+		ReadNType(key + "EnableIPv6", tk->enable_ipv6, bool);
+		ReadN(key + "RunParams", tk->runParamsName);
+		if (tk->runParamsName.size() == 0)
+			tk->runParamsName = "DEFAULT";
+		String ids = "";
+		ReadN(key + "servers", ids);
+		if (ids.size() > 3) {
+			tk->servers_id.clear();
+			auto ll = __DP_LIB_NAMESPACE__::split(ids, ';');
+			for (String id: ll) {
+				if (id.size() > 0)
+					tk->servers_id.push_back(__DP_LIB_NAMESPACE__::parse<int>(id));
+			}
+		}
+		auto tunList = setting.getFolders<List<String>>(key + "tun");
+		for (String tunKey : tunList) {
+			String kk = key + "tun." + tunKey + ".";
+			_Tun t;
+			Read(kk + "remoteHost", t.remoteHost);
+			ReadType(kk + "remotePort", t.remotePort, int);
+			ReadType(kk + "localPort", t.localPort, int);
+			String proto;
+			Read(kk + "proto", proto);
+			t.type = TunType::TCP;
+			if (proto == "udp")
+				t.type = TunType::UDP;
+			tk->tuns.push_back(t);
+		}
+
+		if (created)
+			tasks.push_back(tk);
+	}
+	auto runList = setting.getFolders<List<String>>("RunParams");
+	for (String id : runList) {
+		String key = "RunParams." + id + ".";
+		String __name = id;
+		ReadN(key + "name", __name);
+		_RunParams tk = findRunParamsbyName(__name);
+
+		ReadN(key + "name", tk.name);
+		ReadNType(key + "localport", tk.localPort, int);
+		ReadN(key + "localhost", tk.localHost);
+		ReadN(key + "VPN", tk.tun2SocksName);
+		String tm = "";
+		ReadN(key + "defaultShadowSocks", tm);
+		if (tm.size() > 0)
+			tk.shadowsocks_type = parseSSType(tm);
+		ReadNType(key + "httpport", tk.httpProxy, int);
+		ReadNType(key + "SystemProxy", tk.systemProxy, bool);
+		ReadNType(key + "multimode", tk.multimode, bool);
+		tk.isNull = false;
+
+		if (!findRunParamsbyName(__name).isNull)
+			deleteRunParamsByName(__name);
+		runParams.push_back(tk);
+	}
+	{
+		bool containsDefault =false;
+		for (const _RunParams & p : runParams)
+			if (p.name == "DEFAULT")
+				containsDefault = true;
+		if (!containsDefault) {
+			_RunParams tk;
+			tk.name = "DEFAULT";
+			tk.isNull = false;
+			tk.httpProxy = -1;
+			tk.localHost = "127.0.0.1";
+			tk.localPort = 1080;
+			tk.multimode = false;
+			tk.systemProxy = false;
+			tk.tun2SocksName = "";
+			runParams.push_back(tk);
+		}
+	}
+
+	{
+		String key = "System.Settings.";
+
+		String tmp;
+		ReadN(key + "autostart", tmp);
+		if (tmp.size() > 0)
+			this->autostart = str_to_AutoStartMode(tmp);
+		ReadNType(key + "countRestartAutostarted", this->countRestartAutostarted, UInt);
+		ReadN(key + "ShadowSocksPath", this->shadowSocksPath);
+		ReadN(key + "ShadowSocksPathRust", this->shadowSocksPathRust);
+		{
+			String t;
+			ReadN(key + "ShadowSocksType", t);
+			if (t.size() > 0)
+				this->shadowSocksType = parseSSType(t);
+		}
+
+		ReadN(key + "V2RayPath", this->v2rayPluginPath);
+		ReadN(key + "Tun2Socks", this->tun2socksPath);
+		ReadN(key + "WGetPath", this->wgetPath);
+		ReadNType(key + "WebEnableLogPage", this->enable_log_page, bool);
+		ReadNType(key + "WebEnableImportPage", this->enable_import_page, bool);
+		ReadNType(key + "WebEnableUtilsPage", this->enable_utils_page, bool);
+		ReadNType(key + "WebEnableExportPage", this->enable_export_page, bool);
+		ReadNType(key + "WebEnableExitPage", this->enable_exit_page, bool);
+		ReadNType(key + "UDPTimeout", this->udpTimeout, UInt);
+		ReadNType(key + "WebSessionTimeout", this->web_session_timeout_m, UInt);
+		ReadNType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath, bool);
+		ReadNType(key + "autoDetectTunInterface", this->autoDetectTunInterface, bool);
+
+		tmp = "";
+		ReadN(key + "checkServerMode", tmp);
+		if (tmp.size() > 0)
+			this->checkServerMode = str_to_ServerCheckingMode(tmp);
+
+		ReadNType(key + "enableLogging", this->enableLogging, bool);
+		ReadN(key + "BootstrapDNS", this->bootstrapDNS);
+
+		tmp = "";
+		ReadN(key + "AutoCheckingMode", tmp);
+		if (tmp.size() > 0)
+			this->auto_check_mode = str_to_AutoCheckingMode(tmp);
+		ReadNType(key + "AutoCheckingIntervalS", this->auto_check_interval_s, UInt);
+		ReadN(key + "AutoCheckingIpUrl", this->auto_check_ip_url);
+		ReadN(key + "AutoCheckingDownloadUrl", this->auto_check_download_url);
+	}
+
+
+	{
+
+		auto variablesList = setting.getKeys<List<String>>("System.Variables");
+		for (String id : variablesList) {
+			String key = "System.Variables." + id;
+			this->variables[id] = setting.get(key);
+		}
+	}
+}
+
 void ShadowSocksSettings::Load(const String & text) {
 	__DP_LIB_NAMESPACE__::IStrStream in;
 	in.str(text);
@@ -1085,6 +1547,7 @@ void ShadowSocksSettings::Load(const String & text) {
 		_Server * sr = new _Server(__DP_LIB_NAMESPACE__::parse<int>(id));
 		if (setting.Conteins(key + "V2Ray")) {
 			auto srv = new _V2RayServer(sr);
+			delete sr;
 			sr = srv;
 			ReadNType(key + "tls", srv->isTLS, bool);
 			ReadN(key + "mode", srv->mode);
@@ -1092,8 +1555,6 @@ void ShadowSocksSettings::Load(const String & text) {
 			ReadN(key + "v2host", srv->v2host);
 		}
 
-		if (sr == nullptr)
-			sr = new _Server();
 		if (sr->id >= _Server::glob_id)
 			_Server::glob_id = sr->id + 1;
 		Read(key + "port", sr->port);
@@ -1237,9 +1698,7 @@ void ShadowSocksSettings::Load(const String & text) {
 
 		ReadN(key + "V2RayPath", this->v2rayPluginPath);
 		ReadN(key + "Tun2Socks", this->tun2socksPath);
-		ReadN(key + "Dns2Socks", this->dns2socksPath);
 		ReadN(key + "WGetPath", this->wgetPath);
-		ReadN(key + "tempPath", this->tempPath);
 		ReadNType(key + "WebEnableLogPage", this->enable_log_page, bool);
 		ReadNType(key + "WebEnableImportPage", this->enable_import_page, bool);
 		ReadNType(key + "WebEnableUtilsPage", this->enable_utils_page, bool);
@@ -1247,7 +1706,6 @@ void ShadowSocksSettings::Load(const String & text) {
 		ReadNType(key + "WebEnableExitPage", this->enable_exit_page, bool);
 		ReadNType(key + "UDPTimeout", this->udpTimeout, UInt);
 		ReadNType(key + "WebSessionTimeout", this->web_session_timeout_m, UInt);
-		ReadNType(key + "hideDNS2Socks", this->hideDNS2Socks, bool);
 		ReadNType(key + "fixLinuxWgetPath", this->fixLinuxWgetPath, bool);
 		ReadNType(key + "autoDetectTunInterface", this->autoDetectTunInterface, bool);
 

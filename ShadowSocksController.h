@@ -26,6 +26,7 @@ class _ShadowSocksController {
 		List<__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient *> > clients;
 		std::mutex clients_lock;
 		std::function<void()> _make_exit;
+		bool record_started = false;
 		// 0 - Unknow
 		// 1 - AutoStart
 		// 2 - Disable AutoStart
@@ -51,6 +52,11 @@ class _ShadowSocksController {
 	public:
 		inline void EnableAutoStart() { mode = 1; }
 		inline void DisableAutoStart() { mode = 2; }
+		inline bool RecordStarted() { return record_started; }
+		void startRecord();
+		void stopRecord();
+		void applyRecord();
+		bool haveRecord();
 		inline const List<__DP_LIB_NAMESPACE__::Pair<int, ShadowSocksClient *> > & getRunning() const { return clients; }
 		void Stop();
 		String GetConfigPath();
@@ -72,6 +78,7 @@ class _ShadowSocksController {
 		bool isCreated();
 		inline bool isOpened() const { return password.size() > 1; }
 		void SetPassword(const String & password);
+		inline String GetPassword() const { return this->password; }
 		inline void MakeExit() { Stop(); _make_exit(); }
 		inline void SetExitFinc(std::function<void()> func) { _make_exit = func; }
 		void AutoStart(OnShadowSocksError onCrash);
@@ -91,7 +98,6 @@ class _ShadowSocksController {
 			bool save_last_check = true;
 			AutoCheckingMode auto_check_mode = AutoCheckingMode::Ip;
 			String defaultHost = "127.0.0.1";
-			String tempPath = "./";
 			String wgetPath = "wget";
 			String downloadUrl;
 			String checkIpUrl;

@@ -21,7 +21,7 @@ Request WebUI::processGetServers(Request req) {
 	if (ConteinsKey(req->get, "name"))
 		filter_name = req->get["name"];
 	if (ConteinsKey(req->cookie, "s_group") && filter_group.size() == 0 && !ConteinsKey(req->get, "group"))
-        return makeRedirect(req, "/servers.html?group=" + req->cookie["s_group"] + (filter_name.size() == 0 ? "" : "&name=" + filter_name));
+		return makeRedirect(req, "/servers.html?group=" + req->cookie["s_group"] + (filter_name.size() == 0 ? "" : "&name=" + filter_name));
 	if (filter_group.size() == 0 && ConteinsKey(req->get, "group"))
 		force_cookie = true;
 
@@ -103,7 +103,7 @@ Request WebUI::processGetServers(Request req) {
 	String html = makePage("Servers", "servers/servers_index.txt", List<String>( { filter_name, group_gen.str(), out.str()}));
 	Request resp = makeRequest();
 	if (filter_group.size() != 0 || force_cookie)
-        resp->cookie["s_group"] = filter_group;
+		resp->cookie["s_group"] = filter_group;
 	resp->body = new char[html.size() + 1];
 	strncpy(resp->body, html.c_str(), html.size());
 	resp->body_length = html.size();

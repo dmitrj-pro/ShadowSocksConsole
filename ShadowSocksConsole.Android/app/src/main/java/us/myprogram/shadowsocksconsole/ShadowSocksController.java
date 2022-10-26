@@ -19,6 +19,7 @@ public class ShadowSocksController{
 
     private String nativeLibraryDir;
     private String writableDir;
+    private String cacheDir;
     private ShadowSocksConsoleProcess process = null;
     private Tun2SocksParams t2sparams = null;
 
@@ -28,15 +29,20 @@ public class ShadowSocksController{
 
     public static ShadowSocksController Get() { return inner; }
     public static boolean isNull() { return inner == null;}
-    public static void Create(String nativeLibraryDir, String getFilesDir) {
-        inner = new ShadowSocksController(nativeLibraryDir, getFilesDir);
+    public static void Create(String nativeLibraryDir, String getFilesDir, String cacheDir) {
+        inner = new ShadowSocksController(nativeLibraryDir, getFilesDir, cacheDir);
     }
     public Tun2SocksParams GetT2SParams() { return t2sparams; }
     public void ClearT2SParams() { t2sparams = new Tun2SocksParams(); }
 
-    private ShadowSocksController(String nativeLibraryDir, String getFilesDir) {
+    private ShadowSocksController(String nativeLibraryDir, String getFilesDir, String cacheDir) {
         this.nativeLibraryDir = nativeLibraryDir;
         this.writableDir = getFilesDir;
+        this.cacheDir = cacheDir;
+    }
+
+    public String CacheDir() {
+        return cacheDir;
     }
 
     public boolean Started() {
@@ -60,7 +66,7 @@ public class ShadowSocksController{
     }
 
     public void Start() {
-        process = new ShadowSocksConsoleProcess(nativeLibraryDir, writableDir);
+        process = new ShadowSocksConsoleProcess(nativeLibraryDir, writableDir, cacheDir);
         log = new StringBuffer();
         t2sparams = new Tun2SocksParams();
 

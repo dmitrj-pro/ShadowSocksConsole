@@ -561,13 +561,10 @@ void ConsoleLooper<OutStream, InStream>::S(ParamsReader & arg) {
 				MiCro_s("ss_path", shadowSocksPath);
 				MiCro_s("v2ray_path", v2rayPluginPath);
 				MiCro_s("tun2socks_path", tun2socksPath);
-				MiCro_s("dns2socks_path", dns2socksPath);
 
 				MiCro_s("wget_path", wgetPath);
 
-				MiCro_s("tmp_path", tempPath);
 				MiCro_t("enable_logging", enableLogging, bool);
-				MiCro_t("hide_dns2socks", hideDNS2Socks, bool);
 				MiCro_t("udp_timeout", udpTimeout, UInt);
 				if (parametr == "checkServerMode") {
 					conf.checkServerMode = str_to_ServerCheckingMode(value);
@@ -807,16 +804,24 @@ void ConsoleLooper<OutStream, InStream>::GetSource(ParamsReader & arg) {
 		String cmd = arg.read("config");
 		if (HELP_COND) {
 			cout << "SOURCE boot\n";//
+			cout << "SOURCE patch\n";//
 			cout << "SOURCE\n";
 			return;
 		}
 		if (cmd == "boot") {
-			Path p {getWritebleDirectory()};
+			Path p {getCacheDirectory()};
 			p.Append("boot.conf");
 			if (!p.IsFile())
 				return;
 			String password = p.Get() + SS_VERSION_HASHE;
 			cout << ctrl.GetSourceConfig(p.Get(), password);
+			return;
+		}
+		if (cmd == "patch") {
+			Path p {ctrl.GetConfigPath() + ".patch"};
+			if (!p.IsFile())
+				return;
+			cout << ctrl.GetSourceConfig(p.Get(), ctrl.GetPassword());
 			return;
 		}
 
@@ -836,11 +841,8 @@ void ConsoleLooper<OutStream, InStream>::ShowSettings(ParamsReader &) {
 	SHOWSETTINGS("ShadowSocksRust Path", conf.shadowSocksPathRust);
 	SHOWSETTINGS("V2Ray Path", conf.v2rayPluginPath);
 	SHOWSETTINGS("Tun2Socks path", conf.tun2socksPath);
-	SHOWSETTINGS("Dns2Socks path", conf.dns2socksPath);
 	SHOWSETTINGS("WGet path", conf.wgetPath);
-	SHOWSETTINGS("TempPath", conf.tempPath);
 	SHOWSETTINGS("Enable logging file", conf.enableLogging);
-	SHOWSETTINGS("Hide DNS2Socks", conf.hideDNS2Socks);
 	SHOWSETTINGS("Use system wget (Linux)", conf.fixLinuxWgetPath);
 	SHOWSETTINGS("Auto detect Tap interface", conf.autoDetectTunInterface);
 	SHOWSETTINGS("Udp Timeout (s)", conf.udpTimeout);
@@ -884,14 +886,9 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 
 	cmd = arg.read("Tun2Socks", toString(conf.tun2socksPath));
 	if (cmd.size() > 0) conf.tun2socksPath = cmd;
-	cmd = arg.read("Dns2Socks", toString(conf.dns2socksPath));
-	if (cmd.size() > 0) conf.dns2socksPath = cmd;
 
 	cmd = arg.read("WGetPath", conf.wgetPath);
 	if (cmd.size() > 1) conf.wgetPath = cmd;
-
-	cmd = arg.read("TempPath", conf.tempPath);
-	if (cmd.size() > 1) conf.tempPath = cmd;
 
 	cmd = arg.read("Bootstrap DNS", conf.bootstrapDNS);
 	if (cmd.size() > 1) conf.bootstrapDNS = cmd;
@@ -928,9 +925,6 @@ void ConsoleLooper<OutStream, InStream>::EditSettings(ParamsReader & arg) {
 
 	cmd = arg.read("Auto detect Tap interface", toString(conf.autoDetectTunInterface));
 	if (cmd.size() > 0) conf.autoDetectTunInterface = parse<bool>(cmd);
-
-	cmd = arg.read("Hide DNS2Socks", toString(conf.hideDNS2Socks));
-	if (cmd.size() > 0) conf.hideDNS2Socks = parse<bool>(cmd);
 
 	cmd = arg.read("Auto check servers (Off, Ip, Speed)", AutoCheckingMode_to_str(conf.auto_check_mode));
 	if (cmd.size() > 0) conf.auto_check_mode = str_to_AutoCheckingMode(cmd);

@@ -10,11 +10,13 @@
 #include <_Driver/Path.h>
 #include <Types/Exception.h>
 #include <_Driver/Files.h>
-#include <Addon/libproxy/Chain.h>
-#include <Addon/libproxy/Connectors/Connector.h>
-#include <Addon/libproxy/Connectors/ConnectorSocks.h>
-#include <Addon/libproxy/Connectors/ConnectorDirect.h>
+#include <Network/proxy/Chain.h>
+#include <Network/proxy/Connector.h>
+#include <Network/proxy/ConnectorDirect.h>
+#include <Network/proxy/ConnectorHttpProxy.h>
+#include <Network/proxy/ConnectorSocks.h>
 #include <Addon/libproxy/ProtoParsers/SocketParserMultiplex.h>
+#include <Addon/libproxy/ProtoParsers/SocketParserSocks5.h>
 #include <string>
 
 using __DP_LIB_NAMESPACE__::Path;
@@ -55,7 +57,7 @@ bool socks5IsWork(const String & host, unsigned short port) {
 	c[0] = 5;
 	c[1] = 1;
 	c[2] = 0;
-	TCPClient connect;
+	__DP_LIB_NAMESPACE__::TCPClient connect;
 	if (!connect.Connect(host, port))
 		return false;
 	connect.setReadTimeout(1);
@@ -159,7 +161,7 @@ void ShadowSocksClient::StartMultiMode(SSClientFlags flags) {
 			const MultiModeServerStruct & data = this->_multimode_servers[pos % this->_multimode_servers.size()];
 			try {
 				pos = (pos + 1) % this->_multimode_servers.size();
-				TCPClient target;
+				__DP_LIB_NAMESPACE__::TCPClient target;
 				if (data.v2ray == nullptr)
 					target.Connect(data.srv->host, data.port);
 				else
@@ -282,7 +284,8 @@ String ShadowSocksClient::GenerateConfigRustUDP(SSClientFlags flags) {
 }
 
 String ShadowSocksClient::GenerateConfigRustName(TunType type) {
-	__DP_LIB_NAMESPACE__::Path __p {getWritebleDirectory()};
+	// SetCasheDir
+	__DP_LIB_NAMESPACE__::Path __p {this->tempPath};
 	__p.Append(toString(tk->id) + "-" + toString(srv->id) +  "-ss-conf-" + (type == TunType::TCP ? "tcp.json" : "udp.json"));
 	return __p.Get();
 }
@@ -368,7 +371,7 @@ String ShadowSocksClient::GenerateConfigRust(SSClientFlags flags, TunType type) 
 		shift_left();
 	}
 	for (const _Tun & tun : tk->tuns) {
-		if (tun.type == type)
+		if (tun.type != type)
 			continue;
 		conf << ", {\n";
 		shift_right();
@@ -430,6 +433,10 @@ String ShadowSocksClient::GenerateCMDRust(SSClientFlags flags) {
 	return configPath;
 }
 
+bool isMethodLocal(const String & method) {
+	return method == "Socks5" || method == "Http" || method == "Direct";
+}
+
 #ifdef DP_WIN
 bool Is64bitWindows(void) noexcept;
 #endif
@@ -450,7 +457,7 @@ bool ShadowSocksClient::waitForStart() {
 			return false;
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		if (_socks->isFinished()) {
+		if (!isMethodLocal(tk->method) && _socks->isFinished()) {
 			ExitStatus status;
 			status.code = ExitStatusCode::ApplicationError;
 			status.str = "ShadowSocks unexpected closed with status: " + toString(_socks->ResultCode());
@@ -469,6 +476,10 @@ bool ShadowSocksClient::startTun2Socks(SSClientFlags flags, OnShadowSocksRunned 
 	DP_PRINT_TEXT("Try start VPN mode");
 	tun2socks = new Tun2Socks();
 	tun2socks->config = t2s;
+	#ifdef DP_ANDROID
+		if (!isMethodLocal(tk->method))
+			tun2socks->config.isDNS2Socks = false;
+	#endif
 	tun2socks->proxyPort = run_params.localPort;
 	tun2socks->proxyServer = run_params.localHost;
 	tun2socks->enable_udp = tk->enable_udp;
@@ -477,7 +488,7 @@ bool ShadowSocksClient::startTun2Socks(SSClientFlags flags, OnShadowSocksRunned 
 	tun2socks->SetUDPTimeout(convertTime(this->udpTimeout));
 	try{
 		tun2socks->Start([this, _onSuccess] () {
-			if (!_socks->isFinished()) {
+            if (isMethodLocal(tk->method) || (_socks != nullptr && !_socks->isFinished())) {
 				this->status = ShadowSocksClientStatus::Started;
 				_onSuccess(tk->name);
 			}
@@ -505,8 +516,8 @@ bool ShadowSocksClient::startHttpProxy(SSClientFlags flags, OnShadowSocksRunned 
 		return true;
 	DP_PRINT_TEXT("Try start HTTP-Proxy");
 
-	http_connector_node = new Node(new ConnectorDirect());
-	http_connector_node = new Node(new ConnectorSocks(run_params.localHost,  run_params.localPort), http_connector_node);
+	http_connector_node = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorDirect());
+	http_connector_node = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorSocks(run_params.localHost,  run_params.localPort), http_connector_node);
 	auto makeConnect = [this] (const std::string & host, unsigned short port) {
 		return http_connector_node->makeConnect(host, port);
 	};
@@ -532,6 +543,46 @@ bool ShadowSocksClient::startHttpProxy(SSClientFlags flags, OnShadowSocksRunned 
 	return true;
 }
 
+bool ShadowSocksClient::startSocks5() {
+	DP_PRINT_TEXT("Try start Socks5-Proxy");
+
+	auto pos = tk->password.find(':');
+	String login = "";
+	String password = "";
+	if (pos != tk->password.npos) {
+		login = tk->password.substr(0, pos);
+		password = tk->password.substr(pos+1);
+	}
+
+	socks_connector_node = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorDirect());
+	if (tk->method == "Socks5")
+		socks_connector_node = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorSocks(srv->host,  __DP_LIB_NAMESPACE__::parse<unsigned short>(srv->port), login, password), socks_connector_node);
+	if (tk->method == "Http")
+		socks_connector_node = new __DP_LIB_NAMESPACE__::ProxyNode(new __DP_LIB_NAMESPACE__::ProxyConnectorHttpProxy(srv->host,  __DP_LIB_NAMESPACE__::parse<unsigned short>(srv->port), login, password), socks_connector_node);
+	auto makeConnect = [this] (const std::string & host, unsigned short port) {
+		return socks_connector_node->makeConnect(host, port);
+	};
+	String host_pr = run_params.localHost;
+	int port_pr = run_params.localPort;
+	_socks5_server_thread = new __DP_LIB_NAMESPACE__::Thread([this, host_pr, port_pr, makeConnect]() {
+		this->_socks5_server.ThreadListen(host_pr, port_pr, [makeConnect](__DP_LIB_NAMESPACE__::TCPServerClient cl){
+			cl.setReadTimeout(60);
+			SocketParserSocks5 parser;
+			SocketReader buff(&cl);
+			parser.tryParse(&buff, makeConnect);
+		});
+	});
+	_socks5_server_thread->SetName("Socks5Proxy main loop");
+	_socks5_server_thread->addOnFinish([this]() {
+		ExitStatus status;
+		status.code = ExitStatusCode::NetworkError;
+		status.str = "Main thread of Proxy exited";
+		this->onCrash(status);
+	});
+	_socks5_server_thread->start();
+	return true;
+}
+
 void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSuccess) {
 	status = ShadowSocksClientStatus::Running;
 	PreStartChecking(flags);
@@ -540,30 +591,36 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 	_locker.lock();
 	String configPath = "";
 	try {
-		if (shadowsocks_type == _RunParams::ShadowSocksType::GO)
-			GenerateCMDGO(flags);
-		if (shadowsocks_type == _RunParams::ShadowSocksType::Rust || shadowsocks_type == _RunParams::ShadowSocksType::Android) {
-			configPath = GenerateCMDRust(flags);
+		if (isMethodLocal(tk->method)) {
+			startSocks5();
+		} else {
+			if (shadowsocks_type == _RunParams::ShadowSocksType::GO)
+				GenerateCMDGO(flags);
+			if (shadowsocks_type == _RunParams::ShadowSocksType::Rust || shadowsocks_type == _RunParams::ShadowSocksType::Android) {
+				configPath = GenerateCMDRust(flags);
+			}
 		}
 	} catch (...) {
 		_locker.unlock();
 		throw;
 	}
 #define RUTURN_FUNC { _locker.unlock(); return; }
-	__DP_LIB_NAMESPACE__::Application & s = *_socks;
+	if (_socks != nullptr) {
+		__DP_LIB_NAMESPACE__::Application & s = *_socks;
 
-	s.SetOnCloseFunc([this]() {
-		ExitStatus status;
-		status.code = ExitStatusCode::ApplicationError;
-		status.str = "ShadowsSocks unexpected exited";
-		this->onCrash(status);
-	});
-	s.SetReadedFunc([](const String & str) {
-		DP_LOG_TRACE << "SS: " << str;
-	});
+		s.SetOnCloseFunc([this]() {
+			ExitStatus status;
+			status.code = ExitStatusCode::ApplicationError;
+			status.str = "ShadowsSocks unexpected exited";
+			this->onCrash(status);
+		});
+		s.SetReadedFunc([](const String & str) {
+			DP_LOG_TRACE << "SS: " << str;
+		});
 
-	s.ExecInNewThread();
-	s.WaitForStart();
+		s.ExecInNewThread();
+		s.WaitForStart();
+	}
 
 	if (!waitForStart())
 		return;
@@ -584,7 +641,7 @@ void ShadowSocksClient::Start(SSClientFlags flags, OnShadowSocksRunned _onSucces
 
 	if (!startHttpProxy(flags, _onSuccess))
 		return;
-	if (tun2socks == nullptr && _http_server_thread == nullptr && (!_socks->isFinished())) {
+	if (tun2socks == nullptr && _http_server_thread == nullptr && (_socks5_server_thread != nullptr || (_socks != nullptr && !_socks->isFinished()))) {
 		status = ShadowSocksClientStatus::Started;
 		_onSuccess(tk->name);
 	}
@@ -707,15 +764,17 @@ void ShadowSocksClient::_Stop() {
 	}
 	if (_http_server_thread != nullptr) {
 		this->_http_server.exit();
-		while (http_connector_node->getNext() != nullptr) {
-			auto it = http_connector_node->getNext();
-			delete http_connector_node->getConnector();
-			delete http_connector_node;
-			http_connector_node = it;
-		}
+		delete http_connector_node;
 		_http_server_thread->join();
 		delete _http_server_thread;
 		_http_server_thread = nullptr;
+	}
+	if (_socks5_server_thread != nullptr) {
+		this->_socks5_server.exit();
+		delete socks_connector_node;
+		_socks5_server_thread->join();
+		delete _socks5_server_thread;
+		_socks5_server_thread = nullptr;
 	}
 	delete this->srv;
 	this->srv = nullptr;

@@ -110,6 +110,10 @@
 								}, 700);
 							}
 							function doStartRandom() {
+								var doStartButton = document.getElementById("doStartRandomButton");
+								doStartButton.setAttribute( "onClick", "" );
+								doStartButton.style="font-size: large; margin:auto; color: blue;"
+								
 								var selectBox = document.getElementById("solidSelect");
 								var selectedValue = selectBox.options[selectBox.selectedIndex].value;
 								var link = "/task/start_rnd.html?group=" + selectedValue.toString();
@@ -122,7 +126,7 @@
 						
 						<div class="form-group" style="display: flex">
 							<i class="la la-plus" onclick="doNew()" style="font-size: large; margin:auto"></i>
-							<i class="la la-play" onclick="doStartRandom()" style="font-size: large; margin:auto"></i>
+							<i id="doStartRandomButton" class="la la-play" onclick="doStartRandom()" style="font-size: large; margin:auto"></i>
 							<i class="la la-refresh" onclick="doCheckList()" style="font-size: large; margin:auto"></i>
 							
 							<input type="text" class="form-control" id="name" name="name" placeholder="Enter task name" value="{}" style="max-width: 40%; margin:auto" oninput="changeNameFunc();">

@@ -25,7 +25,9 @@ namespace __DP_LIB_NAMESPACE__ {
 	DP_LOG_DEBUG << X << "'\n";\
 }
 
-class Node;
+namespace __DP_LIB_NAMESPACE__{
+	class ProxyNode;
+}
 
 enum class ShadowSocksClientStatus { None, Running, Started, DoStop, Stoped};
 
@@ -49,7 +51,13 @@ class ShadowSocksClient{
 		__DP_LIB_NAMESPACE__::Application * _socksUdp = nullptr;
 		__DP_LIB_NAMESPACE__::Thread * _http_server_thread = nullptr;
 		__DP_LIB_NAMESPACE__::TCPServer _http_server;
-		Node * http_connector_node = nullptr;
+		__DP_LIB_NAMESPACE__::ProxyNode * http_connector_node = nullptr;
+
+		__DP_LIB_NAMESPACE__::Thread * _socks5_server_thread = nullptr;
+		__DP_LIB_NAMESPACE__::TCPServer _socks5_server;
+		__DP_LIB_NAMESPACE__::ProxyNode * socks_connector_node = nullptr;
+
+
 		__DP_LIB_NAMESPACE__::Thread * _sysproxy = nullptr;
 		bool _is_exit = false;
 		UInt sleepMS = 5000;
@@ -86,6 +94,7 @@ class ShadowSocksClient{
 		// return true if started
 		bool startTun2Socks(SSClientFlags flags, OnShadowSocksRunned _onSuccess);
 		bool startHttpProxy(SSClientFlags flags, OnShadowSocksRunned _onSuccess);
+		bool startSocks5();
 
 	public:
 		inline void SetOnCrash(OnShadowSocksError f) { _onCrash = f; }

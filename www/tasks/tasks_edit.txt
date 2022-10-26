@@ -34,6 +34,18 @@
 	<div class="form-check">
 		<label>Method:</label><br>
 		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="method" value="Direct" {}>
+			<span class="form-radio-sign">Direct connection</span>
+		</label>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="method" value="Socks5" {}>
+			<span class="form-radio-sign">Direct socks5</span>
+		</label>
+		<label class="form-radio-label">
+			<input class="form-radio-input" type="radio" name="method" value="Http" {}>
+			<span class="form-radio-sign">Direct http</span>
+		</label>
+		<label class="form-radio-label">
 			<input class="form-radio-input" type="radio" name="method" value="AEAD_CHACHA20_POLY1305" {}>
 			<span class="form-radio-sign">AEAD_CHACHA20_POLY1305</span>
 		</label>

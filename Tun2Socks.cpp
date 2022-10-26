@@ -8,7 +8,9 @@
 #include <Log/Log.h>
 #include <Network/Utils.h>
 #include <_Driver/Path.h>
+#include <Network/DNS/DNSClient.h>
 #include <_Driver/Files.h>
+#include <_Driver/ServiceMain.h>
 
 using __DP_LIB_NAMESPACE__::toString;
 using __DP_LIB_NAMESPACE__::IStrStream;
@@ -17,13 +19,16 @@ using __DP_LIB_NAMESPACE__::startWithN;
 using __DP_LIB_NAMESPACE__::SmartParser;
 
 String Tun2Socks::appPath;
-String Tun2Socks::tun2socksPath;
 
 void Tun2Socks::WaitForStart() {
 	if (run != nullptr)
 		run->WaitForStart();
-	if (tun2socks != nullptr)
-		tun2socks->WaitForStart();
+	//if (tun2socks != nullptr)
+	//	tun2socks->WaitForStart();
+	if (dnsServerThread != nullptr) {
+		while (!dnsServerThread->isStarted())
+			__DP_LIB_NAMESPACE__::ServiceSinglton::Get().LoopWait(20);
+	}
 }
 
 #ifdef DP_WIN
@@ -268,6 +273,87 @@ Ethernet adapter tuntap:
 	bool __signal_vpn_started = false;
 #endif
 
+String ReadAllFile(const String & file);
+
+void Tun2Socks::startDNSServer() {
+	dnsServerThread = new __DP_LIB_NAMESPACE__::Thread([this](){
+		unsigned short dns_port = 53;
+		#ifdef DP_ANDROID
+			dns_port = 35081;
+		#endif
+
+		String socks = "socks5://" + this->proxyServer;
+		socks += ":";
+		socks += __DP_LIB_NAMESPACE__::toString(this->proxyPort);
+		socks += "/";
+		String dns = "tcp://";
+		dns += *(this->config.dns.begin());
+		dns += ":53/";
+
+		DP_LOG_INFO << "Start dns server " << this->proxyServer << ":" << dns_port << " => "
+					<< socks << " => "
+					<< dns;
+		dnsClient = new __DP_LIB_NAMESPACE__::DNSClient {
+					__DP_LIB_NAMESPACE__::List<__DP_LIB_NAMESPACE__::String>(
+						{
+							socks
+						}
+					), dns};
+		// ToDo
+		__DP_LIB_NAMESPACE__::global_config.network_read_timeout = 20;
+		dnsServer.ThreadListen(this->proxyServer, dns_port, [this](__DP_LIB_NAMESPACE__::UDPServerClient cl) {
+			unsigned short id = 0;
+			bool rd;
+			try{
+				unsigned int readed = 0;
+				__DP_LIB_NAMESPACE__::byte * data = (__DP_LIB_NAMESPACE__::byte * ) cl.ReadN(readed);
+				if (data == nullptr)
+					return;
+				auto request = __DP_LIB_NAMESPACE__::parseDNSQueryRequest(data, readed);
+				id = request.id;
+				rd = request.RD;
+				if (request.queryes.size() > 0)
+					for (const auto & r : request.queryes)
+						DP_LOG_DEBUG << "DNS request: " <<  r.info();
+
+				delete [] data;
+				auto response = this->dnsClient->request(request);
+
+				data = response.bytesArray(readed);
+				cl.Send((char *) data, readed);
+				delete [] data;
+			}catch (__DP_LIB_NAMESPACE__::Exception & e) {
+				DP_LOG_FATAL << "DNS Server error: " << e.toString();
+				__DP_LIB_NAMESPACE__::DNSQueryRequest result;
+				result.id = id;
+				result.QR = 1;
+				result.Opcode = 0;
+				result.AA = 0;
+				result.TC = 0;
+				result.RD = rd;
+				result.RA = 1;
+				result.Z = 0;
+				result.RCODE = 4;
+				unsigned int len = 0;
+				__DP_LIB_NAMESPACE__::byte * data = result.bytesArray(len);
+				cl.Send((char *) data, len);
+				delete [] data;
+			}
+		});
+	});
+	dnsServerThread->SetName("DNS server");
+	dnsServerThread->start();
+	#ifdef DP_LIN
+		#ifndef DP_ANDROID
+			String resolv_origin = ReadAllFile("/etc/resolv.conf");
+			__DP_LIB_NAMESPACE__::Ofstream resolv;
+			resolv.open("/etc/resolv.conf");
+			resolv << "nameserver " << this->proxyServer << "\n" << resolv_origin;
+			resolv.close();
+		#endif
+	#endif
+}
+
 void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCrash) {
 	if (this->config.dns.size() < 1 && config.isDNS2Socks) {
 		throw EXCEPTION("Need one or more dns servers");
@@ -297,7 +383,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 		ap << "-tunDns";
 		ap.SetReadedFunc(ReadFuncProc);
 		if (config.isDNS2Socks){
-			ap << "127.0.0.1";
+			ap << proxyServer;
 		} else {
 			String dns = "";
 			for (const String & dn : this->config.dns)
@@ -314,8 +400,10 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 	ap << "-loglevel" << "none";
 #endif
 	#ifdef DP_ANDROID
+		if (config.isDNS2Socks)
+			startDNSServer();
 		__signal_vpn_started = false;
-		__DP_LIB_NAMESPACE__::Path __p {getWritebleDirectory()};
+		__DP_LIB_NAMESPACE__::Path __p {getCacheDirectory()};
 		__p.Append("sock_path");
 		__DP_LIB_NAMESPACE__::RemoveFile(__p.Get());
 		ap << "--sock-path" << __p.Get();
@@ -414,7 +502,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 		}
 		Application p ("/sbin/ifconfig");
 		//ifconfig tap 192.168.198.2 netmask 255.255.255.0
-		p << this->config.tunName << "192.168.198.2" << "netmask" << "255.255.255.0";
+		p << this->config.tunName << "192.168.198.2" << "netmask" << "255.255.255.0" << "up";
 		int * state = new int(0);
 		p.SetOnCloseFunc([state]() {
 			*state = 1;
@@ -429,7 +517,7 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 	#endif
 	
 	#ifdef DP_ANDROID
-		if ((tun2socks == nullptr ? true : !tun2socks->isFinished()) && (!ap.isFinished())) {
+		if ((this->dnsServerThread == nullptr ? true : this->dnsServerThread->isRunning()) && (!ap.isFinished())) {
 			DP_LOG_FATAL << "[T2S_STARTED]";
 			_onSuccess();
 		}
@@ -469,23 +557,9 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 		deleteDefault->start();
 	}
 	if (config.isDNS2Socks) {
-		tun2socks = new Application(tun2socksPath);
-		Application & t = *tun2socks;
-		if (config.hideDNS2Socks)
-			t << "/q";
-        String tmtp = __DP_LIB_NAMESPACE__::resolveDomain(proxyServer) + ":";
-		tmtp = tmtp + toString(proxyPort);
-		t << tmtp << (*this->config.dns.begin()) << "127.0.0.1:53";
-		t.SetOnCloseFunc([this, _onCrash]() {
-			ExitStatus status;
-			status.code = ExitStatusCode::ApplicationError;
-			status.str = "DNS2Socks unexpected exited";
-			_onCrash(config.name, status);
-		});
-		t.ExecInNewThread();
-		t.WaitForStart();
+		startDNSServer();
 	}
-	if ((tun2socks == nullptr ? true : !tun2socks->isFinished()) && (!ap.isFinished())) {
+	if ((this->dnsServerThread == nullptr ? true : this->dnsServerThread->isRunning()) && (!ap.isFinished())) {
 		_onSuccess();
 		if (config.postStartCommand.size() > 0) {
 			SmartParser prs{config.postStartCommand};
@@ -505,8 +579,8 @@ void Tun2Socks::Start(std::function<void()> _onSuccess, OnShadowSocksError _onCr
 }
 
 void Tun2Socks::DisableCrashFunc(){
-	if (tun2socks != nullptr)
-		tun2socks->SetOnCloseFunc(nullptr);
+	//if (tun2socks != nullptr)
+	//	tun2socks->SetOnCloseFunc(nullptr);
 	if (run != nullptr)
 		run->SetOnCloseFunc(nullptr);
 }
@@ -527,7 +601,7 @@ void Tun2Socks::ThreadLoop() {
 
 void Tun2Socks::Stop() {
 	#ifdef DP_ANDROID
-		__DP_LIB_NAMESPACE__::Path __p {getWritebleDirectory()};
+		__DP_LIB_NAMESPACE__::Path __p {getCacheDirectory()};
 		__p.Append("sock_path");
 		__DP_LIB_NAMESPACE__::RemoveFile(__p.Get());
 	#endif
@@ -591,8 +665,41 @@ void Tun2Socks::Stop() {
 		delete deleteDefault;
 		deleteDefault = nullptr;
 	}
-	if (tun2socks != nullptr) {
-		tun2socks->KillNoJoin();
-		tun2socks = nullptr;
+//	if (tun2socks != nullptr) {
+//		tun2socks->KillNoJoin();
+//		tun2socks = nullptr;
+//	}
+	if (dnsServerThread != nullptr) {
+		dnsServer.exit();
+		dnsServerThread->join();
+		delete this->dnsClient;
+		this->dnsClient = nullptr;
+		delete dnsServerThread;
+		dnsServerThread = nullptr;
+
+		#ifdef DP_LIN
+			#ifndef DP_ANDROID
+				String resolv_origin = ReadAllFile("/etc/resolv.conf");
+				__DP_LIB_NAMESPACE__::IStrStream in;
+				in.str(resolv_origin);
+				__DP_LIB_NAMESPACE__::Ofstream resolv;
+				resolv.open("/etc/resolv.conf");
+
+				bool is_first = true;
+				while (!in.eof()) {
+					String line;
+					getline(in, line);
+					if (is_first && __DP_LIB_NAMESPACE__::endWithN(line, proxyServer)) {
+						is_first = false;
+						continue;
+					}
+					is_first = false;
+					if (line.size() == 0)
+						continue;
+					resolv << line << "\n";
+				}
+				resolv.close();
+			#endif
+		#endif
 	}
 }

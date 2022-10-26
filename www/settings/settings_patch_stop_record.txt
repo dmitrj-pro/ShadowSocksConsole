@@ -1,0 +1,1 @@
+<button id="stop" name="stop" class="btn btn-danger">Stop record</button>

@@ -21,16 +21,11 @@ LOCAL_SRC_FILES  := \
 			./wwwsrc/WebUIRuns.cpp \
 			\
 			../../Addon/WGetDownloader.cpp \
-			../../Addon/libproxy/Chain.cpp \
 			../../Addon/libproxy/ProtoParsers/SocketParser.cpp \
 			../../Addon/libproxy/ProtoParsers/SocketParserHttp.cpp \
 			../../Addon/libproxy/ProtoParsers/SocketParserMultiplex.cpp \
 			../../Addon/libproxy/ProtoParsers/SocketParserSocks5.cpp \
 			../../Addon/libproxy/ProtoParsers/SocketParserTunnel.cpp \
-			../../Addon/libproxy/Connectors/Connector.cpp \
-			../../Addon/libproxy/Connectors/ConnectorDirect.cpp \
-			../../Addon/libproxy/Connectors/ConnectorHttpProxy.cpp \
-			../../Addon/libproxy/Connectors/ConnectorSocks.cpp \
 			\
 			./www/textfill.cpp \
 			\
@@ -48,20 +43,35 @@ LOCAL_SRC_FILES  := \
 			../../_Driver/Path.cpp \
 			../../_Driver/Service_lin.cpp \
 			../../_Driver/ThreadWorker.cpp \
+			\
 			../../Converter/Converter.cpp \
+			../../Converter/Base64.cpp \
+			\
 			../../Crypt/Crypt.cpp \
 			../../Crypt/SCH/System.cpp \
 			../../Crypt/SCH/v1/Crypt_v1.cpp \
 			../../Crypt/SCH/v1/Key_v1.cpp \
 			../../Crypt/SCH/v1/UniKey_v1.cpp \
 			../../Crypt/Converters/PrimitiveConverter.cpp \
+			\
 			../../Log/stlog.cpp \
-			../../DPLibConfig.cpp \
+			\
 			../../Network/TCPClient.cpp \
 			../../Network/TCPServer.cpp \
+			../../Network/UDPClient.cpp \
+			../../Network/UDPServer.cpp \
 			../../Network/Utils.cpp \
 			../../Network/libSimpleDNS/dns.cpp \
-			../../Types/MemoryManager.cpp \
+			../../Network/proxy/Chain.cpp \
+			../../Network/proxy/Connector.cpp \
+			../../Network/proxy/ConnectorDirect.cpp \
+			../../Network/proxy/ConnectorHttpProxy.cpp \
+			../../Network/proxy/ConnectorSocks.cpp \
+			../../Network/DNS/DNSClient.cpp \
+			../../Network/DNS/DNSNetworkClient.cpp \
+			../../Network/DNS/DNSRequestResponseStruct.cpp \
+			../../Network/DNS/DNSResponse.cpp \
+			\
 			../../Parser/ArgumentParser.cpp \
 			../../Parser/SmartParser.cpp \
 			../../Parser/Setting.cpp \

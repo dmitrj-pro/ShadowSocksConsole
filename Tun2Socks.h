@@ -5,6 +5,8 @@
 #include "ShadowSocksMain.h"
 #include <Converter/Converter.h>
 #include <Generator/CodeGenerator.h>
+#include <Network/UDPServer.h>
+#include <Network/DNS/DNSClient.h>
 
 using __DP_LIB_NAMESPACE__::Application;
 using __DP_LIB_NAMESPACE__::String;
@@ -39,13 +41,15 @@ struct Tun2Socks {
 		static String appPath;
 		Application * run = nullptr;
 
-		static String tun2socksPath;
-		Application * tun2socks = nullptr;
+		__DP_LIB_NAMESPACE__::UDPServer dnsServer;
+		__DP_LIB_NAMESPACE__::DNSClient * dnsClient = nullptr;
+		__DP_LIB_NAMESPACE__::Thread * dnsServerThread = nullptr;
+		//Application * tun2socks = nullptr;
+		void startDNSServer();
 
 	public:
 		Tun2Socks():_is_exit(*(new bool(false))) {}
 		inline static void SetT2SPath(const String & p) { appPath = p; }
-		inline static void SetD2SPath(const String & p) { tun2socksPath = p; }
 		void Start(std::function<void()> _onSuccess, OnShadowSocksError _onCrash);
 		void Stop();
 		void DisableCrashFunc();

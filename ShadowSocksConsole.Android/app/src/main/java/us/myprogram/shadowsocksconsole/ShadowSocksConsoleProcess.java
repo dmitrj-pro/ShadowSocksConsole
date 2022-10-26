@@ -13,14 +13,16 @@ public class ShadowSocksConsoleProcess extends Thread {
     private Process SSC = null;
     private String nativeLibraryDir;
     private String writableDir;
+    private String cacheDir;
     private boolean running = false;
     private boolean needClose = false;
     private boolean killSignal = false;
 
 
-    public ShadowSocksConsoleProcess(String nativeLibraryDir, String getFilesDir) {
+    public ShadowSocksConsoleProcess(String nativeLibraryDir, String getFilesDir, String cacheDir) {
         this.nativeLibraryDir = nativeLibraryDir;
         this.writableDir = getFilesDir;
+        this.cacheDir = cacheDir;
     }
 
     public boolean Started() {
@@ -42,6 +44,8 @@ public class ShadowSocksConsoleProcess extends Thread {
         cmd.add(writableDir);
         cmd.add("--set-depend-dir");
         cmd.add(nativeLibraryDir);
+        cmd.add("--set-cache-dir");
+        cmd.add(cacheDir);
         cmd.add("sexecute");
 
         ProcessBuilder builder = new ProcessBuilder();

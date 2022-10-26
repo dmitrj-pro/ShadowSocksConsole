@@ -15,3 +15,10 @@
 								{}
 							</tbody>
 						</table>
+						<form method="POST" action="/settings/patch">
+							<div class="card-action">
+								<button  id="start" name="start" class="btn btn-success">Start record patch</button>
+								{}
+								{}
+							</div>
+						</form>

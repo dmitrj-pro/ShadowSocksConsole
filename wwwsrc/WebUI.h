@@ -133,6 +133,7 @@ class WebUI : public ShadowSocksControllerUpdateStatus {
 		Request processGetSettings(Request req);
 		Request processGetEditSettings(Request req);
 		Request processPostEditSettings(Request req);
+		Request processPostPatch(Request req);
 
 		Request processGetExport(Request req);
 		Request processPostExport(Request req);

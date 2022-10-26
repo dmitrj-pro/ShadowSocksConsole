@@ -20,18 +20,18 @@ using __DP_LIB_NAMESPACE__::trim;
 
 void WebUI::stop() {
 	if (!srv.isNull()) {
-        DP_LOG_INFO << "WebServer will be stop";
+		DP_LOG_INFO << "WebServer will be stop";
 		SmartPtr<HttpHostPathRouterServer> s = srv;
 		srv = SmartPtr<HttpHostPathRouterServer>(nullptr);
 		s->exit();
 
-        DP_LOG_INFO << "Weit WebServer finished";
+		DP_LOG_INFO << "Weit WebServer finished";
 
 		if (!thread.isNull()) {
 			SmartPtr<Thread> th = thread;
 			thread = SmartPtr<Thread>(nullptr);
 			th->join();
-            DP_LOG_INFO << "WebServer stoped";
+			DP_LOG_INFO << "WebServer stoped";
 		}
 	}
 	ShadowSocksController::Get().disconnectNotify(this);
@@ -155,6 +155,7 @@ void WebUI::_start() {
 	srv->add_route("*", "/settings.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetSettings(r); });
 	srv->add_route("*", "/settings/edit", "GET", [this](Request r) { CHECK_AUTH; return this->processGetEditSettings(r); });
 	srv->add_route("*", "/settings/edit", "POST", [this](Request r) { CHECK_AUTH; return this->processPostEditSettings(r); });
+	srv->add_route("*", "/settings/patch", "POST", [this](Request r) { CHECK_AUTH; return this->processPostPatch(r); });
 
 	srv->add_route("*", "/export.html", "GET", [this](Request r) { CHECK_AUTH; return this->processGetExport(r); });
 	srv->add_route("*", "/export.html", "POST", [this](Request r) { CHECK_AUTH; return this->processPostExport(r); });

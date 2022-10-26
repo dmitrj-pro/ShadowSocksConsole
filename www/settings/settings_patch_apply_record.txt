@@ -1,0 +1,1 @@
+<button id="apply" name="apply" class="btn btn-danger">Apply record</button>

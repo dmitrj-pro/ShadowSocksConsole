@@ -61,6 +61,8 @@ public class PageViewLog extends Fragment {
     }
 
     public void updateLogging() {
+        if (getActivity() == null)
+            return;
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {

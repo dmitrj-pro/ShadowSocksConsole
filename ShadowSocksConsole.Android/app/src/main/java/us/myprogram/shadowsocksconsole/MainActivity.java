@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.net.VpnService;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.support.design.widget.FloatingActionButton;
@@ -137,7 +138,12 @@ public class MainActivity extends AppCompatActivity {
         if (!ShadowSocksController.isNull() && ShadowSocksController.Get().Started())
             return;
         //ShadowSocksController.Get().Start();
-        startService(new Intent(this.getApplicationContext(), VPNService.class));
+        //startForegroundService(new Intent(this.getApplicationContext(), VPNService.class));
+        // В Android, сервис привязивается к Activity. Если закрыты все Activity, то и сервис тоже => выход добавление Activity уведомления. Тогда приложение не будет закрыто.
+        if ( Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1)
+            startService(new Intent(this.getApplicationContext(), VPNService.class));
+        else
+            startForegroundService(new Intent(this.getApplicationContext(), VPNService.class));
         updateButton();
     }
     public void onButtonReload(View view) {
@@ -152,6 +158,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         ShadowSocksController.Get().Stop();
         updateButton();
+        //stopService(new Intent(this.getApplicationContext(), VPNService.class));
     }
     public void onButtonKill(View view) {
         if (ShadowSocksController.isNull() || !ShadowSocksController.Get().Started())
